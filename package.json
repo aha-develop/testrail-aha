@@ -1,0 +1,34 @@
+{
+  "name": "aha-develop.testrail-aha",
+  "description": "TestRail",
+  "version": "1.0.0",
+  "author": "Aha! (support@aha.io)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aha-develop/testrail-aha"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "@types/react": "^16.8.0"
+  },
+  "ahaExtension": {
+    "contributes": {
+      "views": {
+        "samplePage": {
+          "title": "Sample Page",
+          "entryPoint": "src/views/samplePage.js",
+          "host": "page",
+          "location": {
+            "menu": "Work"
+          }
+        }
+      },
+      "commands": {
+        "sampleCommand": {
+          "title": "Sample Command",
+          "entryPoint": "src/commands/sampleCommand.js"
+        }
+      }
+    }
+  }
+}
