@@ -8,27 +8,47 @@
     "url": "https://github.com/aha-develop/testrail-aha"
   },
   "license": "MIT",
-  "devDependencies": {
-    "@types/react": "^16.8.0"
-  },
   "ahaExtension": {
     "contributes": {
       "views": {
-        "samplePage": {
-          "title": "Sample Page",
-          "entryPoint": "src/views/samplePage.js",
-          "host": "page",
-          "location": {
-            "menu": "Work"
-          }
+        "tests": {
+          "title": "Tests",
+          "entryPoint": "src/views/tests.tsx",
+          "host": "tab",
+          "recordTypes": [
+            "Feature",
+            "Requirement"
+          ]
         }
       },
       "commands": {
-        "sampleCommand": {
-          "title": "Sample Command",
-          "entryPoint": "src/commands/sampleCommand.js"
+        "createField": {
+          "title": "Create TestRail Field",
+          "entryPoint": "src/commands/createField.ts"
+        }
+      },
+      "settings": {
+        "domain": {
+          "title": "TestRail Domain",
+          "type": "string",
+          "description": "The domain of your TestRail instance",
+          "scope": ["account"]
         }
       }
     }
+  },
+  "dependencies": {
+    "@aha-app/aha-develop-react": "^1.0.0",
+    "moment": "^2.29.4",
+    "prettier": "^2.6.2"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/inflected": "^1.1.29",
+    "@types/jest": "^28.1.8",
+    "@types/react": "^17.0.3",
+    "@types/react-dom": "^17.0.3",
+    "jest": "^28.1.3",
+    "ts-jest": "^28.0.8"
   }
 }
