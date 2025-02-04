@@ -103,7 +103,9 @@ export async function unlinkTestCase(record: ExtensionRecord, caseId: string) {
     | string[]
     | undefined;
 
-  caseIds = caseIds.filter(id => id !== caseId);
+  const newCaseIds = caseIds.filter(id => id !== caseId);
 
-  await record.setExtensionField(IDENTIFIER, 'caseIds', caseIds);
+  if (newCaseIds.length === caseIds.length) return;
+
+  await record.setExtensionField(IDENTIFIER, 'caseIds', newCaseIds);
 }

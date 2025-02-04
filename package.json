@@ -8,9 +8,6 @@
     "url": "https://github.com/aha-develop/testrail-aha"
   },
   "license": "MIT",
-  "devDependencies": {
-    "@types/react": "^16.8.0"
-  },
   "ahaExtension": {
     "contributes": {
       "views": {
