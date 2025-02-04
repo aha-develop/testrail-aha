@@ -80,7 +80,9 @@ const LinkTestCase: React.FC<Props> = ({
 
   return (
     <aha-modal open position='center' size='medium'>
-      <aha-modal-header modalTitle='Link Test Case' />
+      <aha-modal-header modalTitle='Link Test Case'>
+        Link Test Case
+      </aha-modal-header>
       <aha-modal-body>
         <aha-field required={true}>
           <div slot='label'>Test Case ID</div>
