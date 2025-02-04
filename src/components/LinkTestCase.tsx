@@ -1,26 +1,45 @@
 import React, { useRef, useState } from 'react';
 import { IDENTIFIER } from '../extension';
+import { getTestCase, linkTestCase } from '../lib/fields';
 
 type Props = {
   id: string;
   typename: string;
+  syncDelay: number | null;
   setOpen: (open: boolean) => void;
   setSpinner: (spinner: boolean) => void;
-  setSpinnerKey: (string) => void;
+  setEventKey: (string) => void;
+};
+
+// Checks if we can use local data for a linked test case.
+// Returns false if the test case must be synced.
+const linkOrSyncTestCase = async ({ id, typename, caseId, syncDelay }) => {
+  const testCase = await getTestCase(caseId);
+
+  if (!testCase?.lastSynced) return false;
+
+  if (syncDelay < 0 || testCase.lastSynced + syncDelay * 1000 > Date.now()) {
+    linkTestCase(id, typename, caseId);
+
+    return true;
+  } else {
+    return false;
+  }
 };
 
 const LinkTestCase: React.FC<Props> = ({
   id,
   typename,
+  syncDelay,
   setOpen,
   setSpinner,
-  setSpinnerKey,
+  setEventKey,
 }) => {
   const [validation, setValidation] = useState(null);
 
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const handleButtonClick = () => {
+  const handleButtonClick = async () => {
     const caseId = inputRef.current?.value;
 
     if (!caseId) {
@@ -35,9 +54,27 @@ const LinkTestCase: React.FC<Props> = ({
 
     setValidation(null);
 
-    aha.triggerServer(`${IDENTIFIER}.linkTestCase`, { id, typename, caseId });
-    setSpinnerKey(`linkTestCase-${caseId}`);
-    setSpinner(true);
+    const cached = await linkOrSyncTestCase({
+      id,
+      typename,
+      caseId,
+      syncDelay,
+    });
+
+    if (!cached) {
+      const eventKey = `linkTestCase-${caseId}-${Date.now()}`;
+
+      aha.triggerServer(`${IDENTIFIER}.linkTestCase`, {
+        id,
+        typename,
+        caseId,
+        eventKey,
+      });
+
+      setEventKey(eventKey);
+      setSpinner(true);
+    }
+
     setOpen(false);
   };
 

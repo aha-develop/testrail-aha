@@ -4,7 +4,7 @@ import { ExtensionRecord } from '../lib/extensionRecord';
 
 type Props = {
   record: ExtensionRecord;
-  resultKey: string;
+  eventKey: string;
 };
 
 type APIResult = {
@@ -17,7 +17,7 @@ const INTERVAL_TIME = 1 * 1000;
 
 // Any TestRail API calls need to go through server-side code. They store the result in an extension field.
 // We poll the field until it is populated or the timeout has elapsed, at which point we assume it failed.
-const SmartSpinner: React.FC<Props> = ({ record, resultKey }) => {
+const SmartSpinner: React.FC<Props> = ({ record, eventKey }) => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<boolean>(false);
   const [message, setMessage] = useState<string>('');
@@ -41,7 +41,7 @@ const SmartSpinner: React.FC<Props> = ({ record, resultKey }) => {
 
       const result = await record.getExtensionField<APIResult | null>(
         IDENTIFIER,
-        resultKey
+        eventKey
       );
 
       if (result?.message) {
@@ -57,7 +57,7 @@ const SmartSpinner: React.FC<Props> = ({ record, resultKey }) => {
 
     return () => {
       // Clear the extension field so we aren't fetching stale data
-      record.clearExtensionField(IDENTIFIER, resultKey);
+      record.clearExtensionField(IDENTIFIER, eventKey);
     };
   }, []);
 

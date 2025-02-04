@@ -93,9 +93,10 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   const [lastSynced, setLastSynced] = useState<number>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [spinner, setSpinner] = useState<boolean>(false);
-  const [spinnerKey, setSpinnerKey] = useState<string>(null);
+  const [eventKey, setEventKey] = useState<string>(null);
 
   const domain = settings.get('domain') as string | undefined;
+  const syncDelay = settings.get('syncDelay') as number | undefined;
 
   useEffect(() => {
     async function initTestCases() {
@@ -158,7 +159,7 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
       )}
       {spinner && (
         <div className='mb-5'>
-          <SmartSpinner record={record} resultKey={spinnerKey} />
+          <SmartSpinner record={record} eventKey={eventKey} />
         </div>
       )}
 
@@ -176,9 +177,10 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
             <LinkTestCase
               id={record.id}
               typename={record.typename}
+              syncDelay={syncDelay}
               setOpen={setModalOpen}
               setSpinner={setSpinner}
-              setSpinnerKey={setSpinnerKey}
+              setEventKey={setEventKey}
             />
           )}
           <aha-button onClick={createTestCase} kind='link'>

@@ -7,7 +7,7 @@ type LogProps = {
   message: string;
   id: string;
   typename: string;
-  recordKey: string;
+  eventKey: string;
   error: boolean;
 };
 
@@ -15,7 +15,7 @@ type SyncTestCaseProps = {
   testCaseId: string;
   typename: string;
   recordId: string;
-  recordKey: string;
+  eventKey: string;
 };
 
 const getHeaders: () => Headers = () => {
@@ -47,7 +47,7 @@ export const syncTestCase: (
   testCaseId,
   typename,
   recordId,
-  recordKey,
+  eventKey,
 }) => {
   try {
     console.log('Beginning TestRail fetch for Test Case:', testCaseId);
@@ -60,7 +60,7 @@ export const syncTestCase: (
       logResult({
         id: recordId,
         typename,
-        recordKey,
+        eventKey,
         error: true,
         message: 'Cannot connect to TestRail, domain not set',
       });
@@ -73,7 +73,7 @@ export const syncTestCase: (
       logResult({
         id: recordId,
         typename,
-        recordKey,
+        eventKey,
         error: true,
         message: 'Cannot connect to TestRail, username or token not set',
       });
@@ -89,7 +89,7 @@ export const syncTestCase: (
       logResult({
         id: recordId,
         typename,
-        recordKey,
+        eventKey,
         error: true,
         message: 'API limit reached. Please try again in a few minutes.',
       });
@@ -119,7 +119,7 @@ export const syncTestCase: (
         logResult({
           id: recordId,
           typename,
-          recordKey,
+          eventKey,
           error: true,
           message: 'API limit reached. Please try again in a few minutes.',
         });
@@ -129,7 +129,7 @@ export const syncTestCase: (
       logResult({
         id: recordId,
         typename,
-        recordKey,
+        eventKey,
         error: true,
         message: `Error connecting to TestRail: ${response.status} ${response.statusText}`,
       });
@@ -141,7 +141,7 @@ export const syncTestCase: (
     logResult({
       id: recordId,
       typename,
-      recordKey,
+      eventKey,
       error: false,
       message: 'Test case successfully fetched',
     });
@@ -159,7 +159,7 @@ export const syncTestCase: (
     logResult({
       id: recordId,
       typename,
-      recordKey: recordKey,
+      eventKey,
       error: true,
       message: `Unknown error fetching test case: ${error.message}`,
     });
@@ -172,7 +172,7 @@ const logResult: (LogProps) => void = ({
   message,
   id,
   typename,
-  recordKey,
+  eventKey,
   error,
 }) => {
   // Log first in case storing the field fails
@@ -183,7 +183,7 @@ const logResult: (LogProps) => void = ({
   }
 
   const record = aha.models[typename].find(id);
-  record.setExtensionField(IDENTIFIER, recordKey, {
+  record.setExtensionField(IDENTIFIER, eventKey, {
     error: error,
     message: message,
   });
