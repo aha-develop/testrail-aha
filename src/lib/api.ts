@@ -1,20 +1,19 @@
-import { IDENTIFIER, TestCase } from '../extension';
+import { CASE_PREFIX, IDENTIFIER, TestCase } from '../extension';
+import { ExtensionRecord } from './extensionRecord';
 import base64 from 'base64-js';
 
 const DEFAULT_RETRY_WAIT = '60';
 
 type LogProps = {
   message: string;
-  id: string;
-  typename: string;
+  record: ExtensionRecord;
   eventKey: string;
   error: boolean;
 };
 
 type SyncTestCaseProps = {
-  testCaseId: string;
-  typename: string;
-  recordId: string;
+  caseId: string;
+  record: ExtensionRecord;
   eventKey: string;
 };
 
@@ -43,23 +42,17 @@ const getHeaders: () => Headers = () => {
 
 export const syncTestCase: (
   SyncTestCaseProps
-) => Promise<TestCase | null> = async ({
-  testCaseId,
-  typename,
-  recordId,
-  eventKey,
-}) => {
+) => Promise<TestCase | null> = async ({ caseId, record, eventKey }) => {
   try {
-    console.log('Beginning TestRail fetch for Test Case:', testCaseId);
+    console.log('Beginning TestRail fetch for Test Case:', caseId);
 
     const domain = aha.settings.get(`${IDENTIFIER}.domain`) as
       | string
       | undefined;
 
     if (!domain) {
-      logResult({
-        id: recordId,
-        typename,
+      await logResult({
+        record,
         eventKey,
         error: true,
         message: 'Cannot connect to TestRail, domain not set',
@@ -70,9 +63,8 @@ export const syncTestCase: (
     const headers = getHeaders();
 
     if (!headers) {
-      logResult({
-        id: recordId,
-        typename,
+      await logResult({
+        record,
         eventKey,
         error: true,
         message: 'Cannot connect to TestRail, username or token not set',
@@ -86,9 +78,8 @@ export const syncTestCase: (
     )) as number | undefined;
 
     if (retryAt && retryAt > Date.now()) {
-      logResult({
-        id: recordId,
-        typename,
+      await logResult({
+        record,
         eventKey,
         error: true,
         message: 'API limit reached. Please try again in a few minutes.',
@@ -96,14 +87,13 @@ export const syncTestCase: (
       return null;
     }
 
-    const url = new URL(
-      `https://${domain}.testrail.io/index.php?/api/v2/get_case/${testCaseId}`
+    const response = await fetch(
+      `https://${domain}.testrail.io/index.php?/api/v2/get_case/${caseId}`,
+      {
+        method: 'GET',
+        headers: headers,
+      }
     );
-
-    const response = await fetch(url, {
-      method: 'GET',
-      headers: headers,
-    });
 
     if (!response.ok) {
       if (response.status === 429) {
@@ -116,9 +106,8 @@ export const syncTestCase: (
           Date.now() + retryAfterMs
         );
 
-        logResult({
-          id: recordId,
-          typename,
+        await logResult({
+          record,
           eventKey,
           error: true,
           message: 'API limit reached. Please try again in a few minutes.',
@@ -126,9 +115,8 @@ export const syncTestCase: (
         return null;
       }
 
-      logResult({
-        id: recordId,
-        typename,
+      await logResult({
+        record,
         eventKey,
         error: true,
         message: `Error connecting to TestRail: ${response.status} ${response.statusText}`,
@@ -138,27 +126,28 @@ export const syncTestCase: (
 
     const json = await response.json();
 
-    logResult({
-      id: recordId,
-      typename,
-      eventKey,
-      error: false,
-      message: 'Test case successfully fetched',
-    });
-
     // TODO: Once we have sprints hooked up to extensions and runs, we can use
     // the record's sprint to get the most recent run for the test case.
 
-    return {
-      id: json.data.id,
+    const testCase = {
+      id: json.id,
       kind: 'TestCase',
-      title: json.data.title,
+      title: json.title,
       lastSynced: Date.now(),
-    };
+    } as TestCase;
+
+    console.log('Test case fetched:' + JSON.stringify(testCase));
+
+    aha.account.setExtensionField(
+      IDENTIFIER,
+      `${CASE_PREFIX}${caseId}`,
+      testCase
+    );
+
+    return testCase;
   } catch (error) {
-    logResult({
-      id: recordId,
-      typename,
+    await logResult({
+      record,
       eventKey,
       error: true,
       message: `Unknown error fetching test case: ${error.message}`,
@@ -168,10 +157,9 @@ export const syncTestCase: (
   }
 };
 
-const logResult: (LogProps) => void = ({
+export const logResult: (LogProps) => void = async ({
   message,
-  id,
-  typename,
+  record,
   eventKey,
   error,
 }) => {
@@ -182,8 +170,7 @@ const logResult: (LogProps) => void = ({
     console.log(message);
   }
 
-  const record = aha.models[typename].find(id);
-  record.setExtensionField(IDENTIFIER, eventKey, {
+  await record.setExtensionField(IDENTIFIER, eventKey, {
     error: error,
     message: message,
   });

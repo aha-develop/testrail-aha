@@ -47,6 +47,7 @@ const SmartSpinner: React.FC<Props> = ({ record, eventKey }) => {
       if (result?.message) {
         setError(result.error);
         setMessage(result.message);
+        record.clearExtensionField(IDENTIFIER, eventKey);
         setLoading(false);
       } else {
         setTimeout(pollResult, INTERVAL_TIME);

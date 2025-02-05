@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import moment from 'moment';
 import { IDENTIFIER, TestCase, Test, Status } from '../extension';
-import { getTestCase, getTest, getStatus, unlinkTestCase } from '../lib/fields';
+import { unlinkTestCase, getFeatureTabData } from '../lib/fields';
 import RecordLink from '../components/RecordLink';
 import { Styles } from '../components/Styles';
 import LinkTestCase from '../components/LinkTestCase';
@@ -10,6 +10,8 @@ import SmartSpinner from '../components/SmartSpinner';
 
 type RowProps = {
   testCase: TestCase;
+  test?: Test;
+  status?: Status;
   domain: string;
   record: ExtensionRecord;
 };
@@ -39,25 +41,13 @@ const openLinkModal = (setModalOpen, setSpinner) => {
   setSpinner(false);
 };
 
-const TestRow: React.FC<RowProps> = ({ testCase, domain, record }) => {
-  const [test, setTest] = useState<Test>(null);
-  const [status, setStatus] = useState<Status>(null);
-
-  useEffect(() => {
-    async function initData() {
-      const test = await getTest(testCase.latestTestId);
-
-      if (test) {
-        setTest(test);
-
-        const status = await getStatus(test?.statusId);
-        setStatus(status);
-      }
-    }
-
-    initData();
-  }, [testCase]);
-
+const TestRow: React.FC<RowProps> = ({
+  testCase,
+  test,
+  status,
+  domain,
+  record,
+}) => {
   return (
     <div className='test-row'>
       <div className='test-row-column'>
@@ -89,8 +79,12 @@ const TestRow: React.FC<RowProps> = ({ testCase, domain, record }) => {
 const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   const caseIds = fields['caseIds'] as string[] | undefined;
   const [retryAt, setRetryAt] = useState<number>(null);
-  const [testCases, setTestCases] = useState<TestCase[]>([]);
   const [lastSynced, setLastSynced] = useState<number>(null);
+
+  const [testCases, setTestCases] = useState<TestCase[]>([]);
+  const [tests, setTests] = useState<{ [id: string]: Test }>({});
+  const [statuses, setStatuses] = useState<{ [id: string]: Status }>({});
+
   const [modalOpen, setModalOpen] = useState(false);
   const [spinner, setSpinner] = useState<boolean>(false);
   const [eventKey, setEventKey] = useState<string>(null);
@@ -99,7 +93,7 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   const syncDelay = settings.get('syncDelay') as number | undefined;
 
   useEffect(() => {
-    async function initTestCases() {
+    async function initData() {
       const actualRetryAt = (await aha.account.getExtensionField(
         IDENTIFIER,
         'retryAt'
@@ -107,19 +101,11 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
 
       if (actualRetryAt) setRetryAt(actualRetryAt);
 
-      const newTestCases = [];
-
-      for (const caseId of caseIds) {
-        const testCase = await getTestCase(caseId);
-
-        if (testCase) newTestCases.push(testCase);
-      }
-
-      setTestCases(newTestCases);
+      const { testCases, tests, statuses } = await getFeatureTabData(caseIds);
 
       // Refresh lastSynced, as the oldest testcases might have been synced
       let earliestSynced = null;
-      for (const testCase of newTestCases) {
+      for (const testCase of testCases) {
         if (
           testCase.lastSynced &&
           (!earliestSynced || testCase.lastSynced < earliestSynced)
@@ -128,23 +114,34 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
         }
       }
 
+      // Set everything at once to avoid multiple re-renders
+      setTestCases(testCases);
+      setTests(tests);
+      setStatuses(statuses);
       setLastSynced(earliestSynced);
     }
 
-    initTestCases();
+    initData();
   }, [caseIds]);
 
   let caseRows = null;
 
   if (caseIds) {
-    caseRows = testCases.map(testCase => (
-      <TestRow
-        key={`case-${testCase.id}-${testCase.lastSynced}`}
-        testCase={testCase}
-        record={record}
-        domain={domain}
-      />
-    ));
+    caseRows = testCases.map(testCase => {
+      const test = tests[testCase.latestTestId];
+      const status = test && statuses[test.statusId];
+
+      return (
+        <TestRow
+          key={`case-${testCase.id}-${testCase.lastSynced}`}
+          testCase={testCase}
+          test={test}
+          status={status}
+          record={record}
+          domain={domain}
+        />
+      );
+    });
   }
 
   return (
