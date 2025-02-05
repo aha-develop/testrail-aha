@@ -56,7 +56,7 @@ export async function getFeatureTabData(
   return { testCases, tests: testMap, statuses: statusMap };
 }
 
-async function getTestCases(
+export async function getTestCases(
   caseIds: (string | undefined)[]
 ): Promise<TestCase[]> {
   const filteredIds = caseIds.filter(id => id);
@@ -68,9 +68,7 @@ async function getTestCases(
   return await getAccountExtensionFields<TestCase>(names);
 }
 
-export async function getTestRuns(
-  runIds: (string | undefined)[]
-): Promise<TestRun[]> {
+async function getTestRuns(runIds: (string | undefined)[]): Promise<TestRun[]> {
   const filteredIds = runIds.filter(id => id);
 
   if (filteredIds.length === 0) return [];

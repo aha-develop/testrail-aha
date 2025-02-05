@@ -172,8 +172,7 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
           </aha-button>
           {modalOpen && (
             <LinkTestCase
-              id={record.id}
-              typename={record.typename}
+              record={record}
               syncDelay={syncDelay}
               setOpen={setModalOpen}
               setSpinner={setSpinner}

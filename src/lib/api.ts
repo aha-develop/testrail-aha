@@ -44,7 +44,7 @@ export const syncTestCase: (
   SyncTestCaseProps
 ) => Promise<TestCase | null> = async ({ caseId, record, eventKey }) => {
   try {
-    console.log('Beginning TestRail fetch for Test Case:', caseId);
+    console.log(`Beginning TestRail fetch for Test Case: ${caseId}`);
 
     const domain = aha.settings.get(`${IDENTIFIER}.domain`) as
       | string
@@ -72,6 +72,8 @@ export const syncTestCase: (
       return null;
     }
 
+    console.log('Fetching stored TestRail API retry-at');
+
     const retryAt = (await aha.account.getExtensionField(
       IDENTIFIER,
       'retryAt'
@@ -87,6 +89,8 @@ export const syncTestCase: (
       return null;
     }
 
+    console.log('Fetching test case from TestRail');
+
     const response = await fetch(
       `https://${domain}.testrail.io/index.php?/api/v2/get_case/${caseId}`,
       {
@@ -99,6 +103,8 @@ export const syncTestCase: (
       if (response.status === 429) {
         const retryAfter = response.headers.get('Retry-After');
         const retryAfterMs = parseInt(retryAfter ?? DEFAULT_RETRY_WAIT) * 1000;
+
+        console.log('Storing API retry-at in Aha!');
 
         aha.account.setExtensionField(
           IDENTIFIER,
@@ -136,7 +142,9 @@ export const syncTestCase: (
       lastSynced: Date.now(),
     } as TestCase;
 
-    console.log('Test case fetched:' + JSON.stringify(testCase));
+    console.log(
+      `Test case fetched, storing in Aha! ${JSON.stringify(testCase)}`
+    );
 
     aha.account.setExtensionField(
       IDENTIFIER,
@@ -169,6 +177,8 @@ export const logResult: (LogProps) => void = async ({
   } else {
     console.log(message);
   }
+
+  console.log('Sending result to Aha!');
 
   await record.setExtensionField(IDENTIFIER, eventKey, {
     error: error,

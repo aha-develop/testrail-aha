@@ -1,25 +1,38 @@
 import React, { useRef, useState } from 'react';
 import { IDENTIFIER } from '../extension';
-import { getTestCase, linkTestCase } from '../lib/fields';
+import { getTestCases, linkTestCase } from '../lib/fields';
+import { ExtensionRecord } from '../lib/extensionRecord';
 
 type Props = {
-  id: string;
-  typename: string;
+  record: ExtensionRecord;
   syncDelay: number | null;
   setOpen: (open: boolean) => void;
   setSpinner: (spinner: boolean) => void;
   setEventKey: (string) => void;
 };
 
+type LinkOrSyncProps = {
+  record: ExtensionRecord;
+  caseId: string;
+  syncDelay: number | null;
+};
+
 // Checks if we can use local data for a linked test case.
 // Returns false if the test case must be synced.
-const linkOrSyncTestCase = async ({ id, typename, caseId, syncDelay }) => {
-  const testCase = await getTestCase(caseId);
+const linkOrSyncTestCase: (LinkOrSyncProps) => Promise<boolean> = async ({
+  record,
+  caseId,
+  syncDelay,
+}) => {
+  const testCases = await getTestCases([caseId]);
+  if (testCases.length === 0) return false;
+
+  const testCase = testCases[0];
 
   if (!testCase?.lastSynced) return false;
 
   if (syncDelay < 0 || testCase.lastSynced + syncDelay * 1000 > Date.now()) {
-    linkTestCase(id, typename, caseId);
+    linkTestCase(record, caseId);
 
     return true;
   } else {
@@ -28,8 +41,7 @@ const linkOrSyncTestCase = async ({ id, typename, caseId, syncDelay }) => {
 };
 
 const LinkTestCase: React.FC<Props> = ({
-  id,
-  typename,
+  record,
   syncDelay,
   setOpen,
   setSpinner,
@@ -55,8 +67,7 @@ const LinkTestCase: React.FC<Props> = ({
     setValidation(null);
 
     const cached = await linkOrSyncTestCase({
-      id,
-      typename,
+      record,
       caseId,
       syncDelay,
     });
@@ -65,8 +76,8 @@ const LinkTestCase: React.FC<Props> = ({
       const eventKey = `linkTestCase-${caseId}-${Date.now()}`;
 
       aha.triggerServer(`${IDENTIFIER}.linkTestCase`, {
-        id,
-        typename,
+        id: record.id,
+        typename: record.typename,
         caseId,
         eventKey,
       });
