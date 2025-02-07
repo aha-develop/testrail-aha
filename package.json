@@ -59,7 +59,7 @@
         },
         "token": {
           "title": "TestRail API Token",
-          "type": "string",
+          "type": "secret",
           "description": "The token for your TestRail API authentication",
           "scope": ["account"]
         }
