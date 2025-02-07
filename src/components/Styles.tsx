@@ -65,6 +65,16 @@ export const Styles = () => {
           font-size: 12px;
           color: #666666;
         }
+
+        .spinner {
+          font-size: 12px;
+          display: flex;
+          justify-content: center;
+        }
+
+        .spinner-error {
+          color: #c9250e;
+        }
       `}
     </style>
   );

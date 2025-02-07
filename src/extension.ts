@@ -5,11 +5,6 @@ export const RUN_PREFIX = 'run_';
 export const TEST_PREFIX = 'test_';
 export const STATUS_PREFIX = 'status_';
 
-export type FeatureExtensionFields = {
-  caseIds?: string[];
-  lastSynced?: number;
-} & Record<string, any>;
-
 export type TestRailRecord = TestCase | TestRun | Test;
 
 export type TestCase = {
@@ -17,6 +12,7 @@ export type TestCase = {
   kind: 'TestCase';
   title: string;
   latestTestId?: string;
+  lastSynced?: number;
 };
 
 export type TestRun = {
@@ -24,6 +20,7 @@ export type TestRun = {
   kind: 'TestRun';
   name: string;
   testIds?: string[];
+  lastSynced?: number;
 };
 
 export type Test = {
@@ -34,6 +31,7 @@ export type Test = {
   runId: string;
   statusId: string;
   latestComment?: string;
+  lastSynced?: number;
 };
 
 export type Status = {

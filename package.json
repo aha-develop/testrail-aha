@@ -17,7 +17,8 @@
           "host": "tab",
           "recordTypes": [
             "Feature",
-            "Requirement"
+            "Requirement",
+            "Epic"
           ]
         }
       },
@@ -27,28 +28,46 @@
           "entryPoint": "src/commands/createField.ts"
         }
       },
+      "events": {
+        "linkTestCase": {
+          "title": "Link Test Case",
+          "entryPoint": "src/events/linkTestCase.ts",
+          "handles": [
+            "aha-develop.testrail-aha.linkTestCase"
+          ]
+        }
+      },
       "settings": {
         "domain": {
           "title": "TestRail Domain",
           "type": "string",
           "description": "The domain of your TestRail instance",
           "scope": ["account"]
+        },
+        "syncDelay": {
+          "title": "TestRail API Automatic Sync Delay",
+          "type": "number",
+          "description": "How long (in seconds) before records will be automatically re-synced. If negative, will never auto-sync.",
+          "scope": ["account"],
+          "default": 300
+        },
+        "username": {
+          "title": "TestRail API Username",
+          "type": "string",
+          "description": "The username for your TestRail API authentication",
+          "scope": ["account"]
+        },
+        "token": {
+          "title": "TestRail API Token",
+          "type": "secret",
+          "description": "The token for your TestRail API authentication",
+          "scope": ["account"]
         }
       }
     }
   },
   "dependencies": {
-    "@aha-app/aha-develop-react": "^1.0.0",
     "moment": "^2.29.4",
-    "prettier": "^2.6.2"
-  },
-  "devDependencies": {
-    "typescript": "^5.5.4",
-    "@types/inflected": "^1.1.29",
-    "@types/jest": "^28.1.8",
-    "@types/react": "^17.0.3",
-    "@types/react-dom": "^17.0.3",
-    "jest": "^28.1.3",
-    "ts-jest": "^28.0.8"
+    "base64-js": "^1.5.1"
   }
 }
