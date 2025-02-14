@@ -1,5 +1,5 @@
 import { IDENTIFIER, TestRun } from '../extension';
-import { fetchTestRail, logResult, type BaseParams } from '../lib/api';
+import { fetchTestRail, logResult, BaseParams } from '../lib/api';
 
 type TestRunProps = BaseParams & {
   projectId: string;

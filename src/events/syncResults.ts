@@ -1,5 +1,5 @@
 import { IDENTIFIER, TestResult } from '../extension';
-import { fetchTestRail, logResult, type BaseParams } from '../lib/api';
+import { fetchTestRail, logResult, BaseParams } from '../lib/api';
 
 type SyncResultParams = BaseParams & {
   runId: string;

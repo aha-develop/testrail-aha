@@ -1,5 +1,5 @@
 import { IDENTIFIER, Suite } from '../extension';
-import { fetchTestRail, logResult, type BaseParams } from '../lib/api';
+import { fetchTestRail, logResult, BaseParams } from '../lib/api';
 
 type SuiteProps = BaseParams & {
   projectId: string;

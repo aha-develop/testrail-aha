@@ -1,5 +1,5 @@
 import { IDENTIFIER, Status } from '../extension';
-import { fetchTestRail, logResult, type BaseParams } from '../lib/api';
+import { fetchTestRail, logResult, BaseParams } from '../lib/api';
 
 const syncStatuses: (props: BaseParams) => void = async ({
   domain,

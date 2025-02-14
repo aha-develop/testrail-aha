@@ -1,5 +1,5 @@
 import { IDENTIFIER, Project } from '../extension';
-import { fetchTestRail, logResult, type BaseParams } from '../lib/api';
+import { fetchTestRail, logResult, BaseParams } from '../lib/api';
 
 type SyncProjectsProps = BaseParams & {
   page?: number;
