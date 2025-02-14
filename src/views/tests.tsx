@@ -1,7 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import moment from 'moment';
 import { IDENTIFIER, TestCase, Test, Status } from '../extension';
-import { unlinkTestCase, getFeatureTabData } from '../lib/fields';
+import {
+  getTestCases,
+  getTests,
+  getLinkedComments,
+  getStatuses,
+} from '../lib/extensionFields/queries';
+import { unlinkTestCase } from '../lib/extensionFields/updates';
 import RecordLink from '../components/RecordLink';
 import { Styles } from '../components/Styles';
 import LinkTestCase from '../components/LinkTestCase';
@@ -11,6 +17,7 @@ import SmartSpinner from '../components/SmartSpinner';
 type RowProps = {
   testCase: TestCase;
   test?: Test;
+  comment?: string;
   status?: Status;
   domain: string;
   record: ExtensionRecord;
@@ -21,6 +28,43 @@ type TabProps = {
   fields: Record<string, unknown>;
   settings: Aha.Settings;
 };
+
+type FeatureTabData = {
+  testCases: TestCase[];
+  tests: { [caseId: string]: Test };
+  comments: { [testId: string]: string };
+  statuses: { [key: string]: Status };
+};
+
+export async function getFeatureTabData(
+  caseIds: string[],
+  testIds: string[]
+): Promise<FeatureTabData> {
+  const testCases = await getTestCases(caseIds);
+
+  const tests = await getTests(testIds);
+
+  const testMap = tests.reduce(
+    (acc, test) => ({ ...acc, [test.caseId]: test }),
+    {}
+  );
+
+  const commentMap = await getLinkedComments(tests);
+
+  const statusIds = tests.map(test => test.statusId);
+  const statuses = await getStatuses(statusIds);
+  const statusMap = statuses.reduce((acc, status) => {
+    acc[status.id] = status;
+    return acc;
+  }, {});
+
+  return {
+    testCases,
+    tests: testMap,
+    comments: commentMap,
+    statuses: statusMap,
+  };
+}
 
 function createTestCase() {
   alert('Creating a test case is not yet implemented');
@@ -44,6 +88,7 @@ const openLinkModal = (setModalOpen, setSpinner) => {
 const TestRow: React.FC<RowProps> = ({
   testCase,
   test,
+  comment,
   status,
   domain,
   record,
@@ -54,9 +99,7 @@ const TestRow: React.FC<RowProps> = ({
         <RecordLink record={testCase} domain={domain} />
         <div>
           <div className='test-title'>{testCase.title}</div>
-          {test?.latestComment && (
-            <div className='test-comment'>{test.latestComment}</div>
-          )}
+          {comment && <div className='test-comment'>{comment}</div>}
         </div>
       </div>
       {test && (
@@ -78,12 +121,12 @@ const TestRow: React.FC<RowProps> = ({
 
 const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   const caseIds = fields['caseIds'] as string[] | undefined;
+  const testIds = fields['testIds'] as string[] | undefined;
+
   const [retryAt, setRetryAt] = useState<number>(null);
   const [lastSynced, setLastSynced] = useState<number>(null);
 
-  const [testCases, setTestCases] = useState<TestCase[]>([]);
-  const [tests, setTests] = useState<{ [id: string]: Test }>({});
-  const [statuses, setStatuses] = useState<{ [id: string]: Status }>({});
+  const [tabData, setTabData] = useState<FeatureTabData>(null);
 
   const [modalOpen, setModalOpen] = useState(false);
   const [spinner, setSpinner] = useState<boolean>(false);
@@ -101,11 +144,11 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
 
       if (actualRetryAt) setRetryAt(actualRetryAt);
 
-      const { testCases, tests, statuses } = await getFeatureTabData(caseIds);
+      const tabData = await getFeatureTabData(caseIds, testIds);
 
       // Refresh lastSynced, as the oldest testcases might have been synced
       let earliestSynced = null;
-      for (const testCase of testCases) {
+      for (const testCase of tabData.testCases) {
         if (
           testCase.lastSynced &&
           (!earliestSynced || testCase.lastSynced < earliestSynced)
@@ -114,10 +157,7 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
         }
       }
 
-      // Set everything at once to avoid multiple re-renders
-      setTestCases(testCases);
-      setTests(tests);
-      setStatuses(statuses);
+      setTabData(tabData);
       setLastSynced(earliestSynced);
     }
 
@@ -126,16 +166,25 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
 
   let caseRows = null;
 
+  const { testCases, tests, comments, statuses } = tabData || {
+    testCases: [],
+    tests: {},
+    comments: {},
+    statuses: [],
+  };
+
   if (caseIds) {
     caseRows = testCases.map(testCase => {
-      const test = tests[testCase.latestTestId];
+      const test = tests[testCase.id];
       const status = test && statuses[test.statusId];
+      const comment = test ? comments[test.id] : null;
 
       return (
         <TestRow
           key={`case-${testCase.id}-${testCase.lastSynced}`}
           testCase={testCase}
           test={test}
+          comment={comment}
           status={status}
           record={record}
           domain={domain}

@@ -1,15 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { IDENTIFIER } from '../extension';
 import { ExtensionRecord } from '../lib/extensionRecord';
+import { type APIResult } from '../lib/api';
 
 type Props = {
   record: ExtensionRecord;
   eventKey: string;
-};
-
-type APIResult = {
-  message?: string;
-  error?: boolean;
 };
 
 const MAX_POLL_TIME = 5 * 60 * 1000;

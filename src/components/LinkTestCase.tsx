@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { IDENTIFIER } from '../extension';
-import { getTestCases, linkTestCase } from '../lib/fields';
+import { getTestCases } from '../lib/extensionFields/queries';
+import { linkTestCase } from '../lib/extensionFields/updates';
 import { ExtensionRecord } from '../lib/extensionRecord';
 
 type Props = {
@@ -73,7 +74,7 @@ const LinkTestCase: React.FC<Props> = ({
     });
 
     if (!cached) {
-      const eventKey = `linkTestCase-${caseId}-${Date.now()}`;
+      const eventKey = `linkTestCase_${caseId}_${Date.now()}`;
 
       aha.triggerServer(`${IDENTIFIER}.linkTestCase`, {
         id: record.id,

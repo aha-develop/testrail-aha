@@ -1,11 +1,6 @@
 // NOT TO BE PUBLISHED IN THE FINAL PACKAGE USED FOR TESTING PURPOSES ONLY
-import {
-  IDENTIFIER,
-  CASE_PREFIX,
-  TEST_PREFIX,
-  RUN_PREFIX,
-  STATUS_PREFIX,
-} from '../extension';
+import { IDENTIFIER } from '../extension';
+import { fieldName } from '../lib/extensionFields/queries';
 
 async function createTestCase() {
   const id = await aha.commandPrompt('TestCase ID', {
@@ -29,7 +24,7 @@ async function createTestCase() {
     });
   }
 
-  aha.account.setExtensionField(IDENTIFIER, `${CASE_PREFIX}${id}`, {
+  aha.account.setExtensionField(IDENTIFIER, fieldName('TestCase', id), {
     kind: 'TestCase',
     id,
     title,
@@ -61,7 +56,7 @@ async function createTestRun() {
     testIds = testIds.split(',').map(id => id.trim());
   }
 
-  aha.account.setExtensionField(IDENTIFIER, `${RUN_PREFIX}${id}`, {
+  aha.account.setExtensionField(IDENTIFIER, fieldName('TestRun', id), {
     kind: 'TestRun',
     id,
     name,
@@ -90,27 +85,13 @@ async function createTest() {
     placeholder: 'Enter the ID of the status',
   });
 
-  const hasComment = await aha.commandPrompt('Add a comment?', {
-    placeholder: 'Y/N',
-    default: 'N',
-  });
-
-  let latestComment;
-
-  if (hasComment === 'Y') {
-    latestComment = await aha.commandPrompt('Comment', {
-      placeholder: 'Enter the comment for the test',
-    });
-  }
-
-  aha.account.setExtensionField(IDENTIFIER, `${TEST_PREFIX}${id}`, {
+  aha.account.setExtensionField(IDENTIFIER, fieldName('Test', id), {
     kind: 'Test',
     id,
     name,
     caseId,
     runId,
     statusId,
-    latestComment,
   });
 }
 
@@ -127,7 +108,7 @@ async function createStatus() {
     placeholder: 'Enter the color of the status as a hexcode eg #FF0000',
   });
 
-  aha.account.setExtensionField(IDENTIFIER, `${STATUS_PREFIX}${id}`, {
+  aha.account.setExtensionField(IDENTIFIER, fieldName('Status', id), {
     kind: 'Status',
     id,
     label,
