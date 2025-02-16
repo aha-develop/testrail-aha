@@ -30,7 +30,7 @@ const syncTestCases: (props: SyncTestCasesProps) => void = async ({
       params.push(`updated_after=${updatedAfter}`);
     }
     if (suiteId) {
-      params.push(`suite_id=${suiteId}`);
+      params.unshift(`suite_id=${suiteId}`); // Has to be the first param after projectId
     }
 
     const path = `get_cases/${projectId}&${params.join('&')}`;

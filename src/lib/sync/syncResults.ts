@@ -9,7 +9,7 @@ const syncResults: (props: SyncProps) => Promise<null> = async ({
   result,
   logger,
 }) => {
-  const testResults = [];
+  const testResults: TestResult[] = [];
   const runIds = result.runs.map(run => run.id);
 
   if (!runIds || runIds.length === 0) {
@@ -20,11 +20,12 @@ const syncResults: (props: SyncProps) => Promise<null> = async ({
 
   const now = Date.now();
 
-  for (const runId in runIds) {
+  for (const runId of runIds) {
     const eventKey = `wizardResults_${runId}`;
     const args = { domain, runId };
 
-    if (lastResultSync) args['createdAfter'] = lastResultSync;
+    if (lastResultSync)
+      args['createdAfter'] = Math.floor(lastResultSync / 1000);
 
     const lambdaFunc = async args => {
       await aha.triggerServer(`${IDENTIFIER}.syncResults`, args);
@@ -43,7 +44,7 @@ const syncResults: (props: SyncProps) => Promise<null> = async ({
       eventKey,
     });
 
-    testResults.concat(results);
+    testResults.push(...results);
   }
 
   logger('Successfully fetched all test results');

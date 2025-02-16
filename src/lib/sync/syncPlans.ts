@@ -28,7 +28,8 @@ const fetchPlanIds: (props: FetchProps) => Promise<string[]> = async ({
 
   const args = { domain, projectId };
 
-  if (createdAfter && !isCompleted) args['createdAfter'] = createdAfter;
+  if (createdAfter && !isCompleted)
+    args['createdAfter'] = Math.floor(createdAfter / 1000);
   if (isCompleted) {
     args['isCompleted'] = 1;
     args['limit'] = numPlans
@@ -138,7 +139,7 @@ export const syncCompletedPlans: (
 
   if (shouldFetch.toLowerCase() !== 'y') {
     logger('Skipping completed test plan loading');
-    return result;
+    return null;
   }
 
   const limit = Number.parseInt(
@@ -178,6 +179,8 @@ export const syncRunsForPlan: (
   const { planIds } = result;
 
   if (!planIds || planIds.length === 0) return null;
+
+  logger('Beginning load of test runs for plans from TestRail.');
 
   const eventKey = 'syncPlanRuns';
 

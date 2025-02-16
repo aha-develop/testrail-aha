@@ -69,7 +69,7 @@ export const waitForLambda: <T extends LambdaResult>(
         }
 
         await aha.account.clearExtensionField(IDENTIFIER, eventKey); // Tidy up
-        resolve(result as T);
+        return resolve(result as T);
       }
     }
 
@@ -96,11 +96,11 @@ export const waitForPagedLambda: <T>(
   idKey,
   ids,
 }) => {
-  return new Promise<T[]>(async resolve => {
+  return new Promise<T[]>(async (resolve, reject) => {
     let page = 1;
 
     const results = [] as T[];
-    const promises = [];
+    const promises = [] as Promise<PagedAPIResult>[];
 
     const concurrency = usePage ? INITIAL_CONCURRENCY : CONCURRENCY;
 
@@ -113,7 +113,7 @@ export const waitForPagedLambda: <T>(
         lambdaArgs[idKey] = ids[page - 1];
       }
 
-      promises[i] = waitForLambda<PagedAPIResult>({
+      promises[i] = waitForLambda<LambdaResult>({
         eventKey: `${eventKey}_parallel_${page}`,
         lambdaFunc,
         args: lambdaArgs,
@@ -122,26 +122,29 @@ export const waitForPagedLambda: <T>(
       page++;
     }
 
-    let promiseResults = await Promise.all<LambdaResult[]>(promises);
-    let error = promiseResults.find(result => result.error).message;
+    progressFunc(1, page - 1);
+
+    let promiseResults = await Promise.all<LambdaResult>(promises);
+    let error = promiseResults.find(result => result.error)?.message;
     let hasMore = true;
 
     // Slightly different handling because paged and unpaged results have a different structure
     if (usePage) {
       hasMore = promiseResults[promiseResults.length - 1].result?.hasMore;
-      results.concat(
-        promiseResults.flatMap(
+      results.push(
+        ...promiseResults.flatMap(
           result => (result as PagedAPIResult).result?.result ?? []
         )
       );
     } else {
       hasMore = page <= ids.length;
-      results.concat(
-        promiseResults.flatMap(result => (result as APIResult).result ?? [])
+      results.push(
+        ...promiseResults.flatMap(result => (result as APIResult).result ?? [])
       );
     }
 
     while (hasMore && !error) {
+      let oldPage = page;
       for (let i = 0; i < CONCURRENCY && (!ids || page <= ids.length); i++) {
         const lambdaArgs = { ...args };
 
@@ -159,29 +162,31 @@ export const waitForPagedLambda: <T>(
         page++;
       }
 
-      progressFunc(1, page - 1);
+      progressFunc(oldPage, page - 1);
 
       promiseResults = await Promise.all<LambdaResult>(promises);
-      error = promiseResults.find(result => result.error).message;
+      error = promiseResults.find(result => result.error)?.message;
 
       // Slightly different handling because paged and unpaged results have a different structure
       if (usePage) {
         hasMore = promiseResults[promiseResults.length - 1].result?.hasMore;
-        results.concat(
-          promiseResults.flatMap(
+        results.push(
+          ...promiseResults.flatMap(
             result => (result as PagedAPIResult).result?.result ?? []
           )
         );
       } else {
         hasMore = page <= ids.length;
-        results.concat(
-          promiseResults.flatMap(result => (result as APIResult).result ?? [])
+        results.push(
+          ...promiseResults.flatMap(
+            result => (result as APIResult).result ?? []
+          )
         );
       }
     }
 
     if (error) {
-      throw new Error(error);
+      return reject(error);
     }
 
     resolve(results);

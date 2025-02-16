@@ -5,6 +5,7 @@ import { linkTestCase } from '../lib/extensionFields/updates';
 import { ExtensionRecord } from '../lib/extensionRecord';
 
 type Props = {
+  domain: string;
   record: ExtensionRecord;
   syncDelay: number | null;
   setOpen: (open: boolean) => void;
@@ -42,6 +43,7 @@ const linkOrSyncTestCase: (LinkOrSyncProps) => Promise<boolean> = async ({
 };
 
 const LinkTestCase: React.FC<Props> = ({
+  domain,
   record,
   syncDelay,
   setOpen,
@@ -78,6 +80,7 @@ const LinkTestCase: React.FC<Props> = ({
 
       aha.triggerServer(`${IDENTIFIER}.linkTestCase`, {
         id: record.id,
+        domain,
         typename: record.typename,
         caseId,
         eventKey,

@@ -28,7 +28,8 @@ const fetchRuns: (props: FetchProps) => Promise<TestRun[]> = async ({
 
   const args = { domain, projectId };
 
-  if (createdAfter && !isCompleted) args['createdAfter'] = createdAfter;
+  if (createdAfter && !isCompleted)
+    args['createdAfter'] = Math.floor(createdAfter / 1000);
   if (isCompleted) {
     args['isCompleted'] = 1;
     args['limit'] = numRuns

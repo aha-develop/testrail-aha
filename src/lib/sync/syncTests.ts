@@ -20,11 +20,11 @@ const syncTests: (props: SyncProps) => Promise<null> = async ({
 
   const now = Date.now();
 
-  for (const runId in runIds) {
+  for (const runId of runIds) {
     const eventKey = `syncTests_${runId}`;
     const args = { domain, runId };
 
-    if (lastTestSync) args['updatedAfter'] = lastTestSync;
+    if (lastTestSync) args['updatedAfter'] = Math.floor(lastTestSync / 1000);
 
     const lambdaFunc = async args => {
       await aha.triggerServer(`${IDENTIFIER}.syncTests`, args);
@@ -43,7 +43,7 @@ const syncTests: (props: SyncProps) => Promise<null> = async ({
       eventKey,
     });
 
-    tests.concat(results);
+    tests.push(...results);
   }
 
   logger('Successfully fetched all tests');

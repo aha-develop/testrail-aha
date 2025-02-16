@@ -51,7 +51,7 @@ const fetchCases: (props: FetchProps) => Promise<TestCase[]> = async ({
   const args = { domain, projectId };
 
   if (suiteId) args['suiteId'] = suiteId;
-  if (updatedAfter) args['updatedAfter'] = updatedAfter;
+  if (updatedAfter) args['updatedAfter'] = Math.floor(updatedAfter / 1000);
 
   const lambdaFunc = async args => {
     await aha.triggerServer(`${IDENTIFIER}.syncCases`, args);
@@ -83,7 +83,7 @@ const syncCases: (props: SyncProps) => Promise<SyncResult> = async ({
 
   const { projects, suites } = result;
 
-  const testCases = [];
+  const testCases: TestCase[] = [];
   const projectSuites = mapProjectSuites({
     projects: projects ?? [],
     suites: suites ?? [],
@@ -100,7 +100,7 @@ const syncCases: (props: SyncProps) => Promise<SyncResult> = async ({
         logger,
       });
 
-      testCases.concat(results);
+      testCases.push(...results);
       continue;
     }
 
@@ -113,7 +113,7 @@ const syncCases: (props: SyncProps) => Promise<SyncResult> = async ({
         logger,
       });
 
-      testCases.concat(results);
+      testCases.push(...results);
     }
   }
 

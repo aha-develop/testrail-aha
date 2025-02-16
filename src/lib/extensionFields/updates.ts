@@ -73,17 +73,16 @@ const updateIndex: <T extends TestRailRecord>(
   key: string,
   records: T[]
 ) => Promise<void> = async (key, records) => {
-  const existingIds = await aha.account.getExtensionField<string[]>(
+  const allIds =
+    (await aha.account.getExtensionField<string[]>(IDENTIFIER, key)) ?? [];
+
+  allIds.push(...records.map(record => record.id));
+
+  await aha.account.setExtensionField(
     IDENTIFIER,
-    key
+    key,
+    Array.from(new Set(allIds))
   );
-
-  const allIds = new Set(
-    ...(existingIds || []),
-    ...records.map(record => record.id)
-  );
-
-  await aha.account.setExtensionField(IDENTIFIER, key, Array.from(allIds));
 };
 
 // To minimize the size of the index extension fields, we use multiple indexes

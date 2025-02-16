@@ -197,6 +197,8 @@ const bulkSync: (
     options?: Aha.CommandPromptOptions
   ) => Promise<any>
 ) => Promise<void> = async (logger, prompter) => {
+  let currentStage = 0;
+
   try {
     const domain = aha.settings.get(`${IDENTIFIER}.domain`) as string;
 
@@ -208,15 +210,9 @@ const bulkSync: (
     }
 
     const syncState = await getBulkSyncState();
-    const {
-      stage,
-      status,
-      lastCaseSync,
-      lastRunSync,
-      lastTestSync,
-      lastResultSync,
-      lastPlanSync,
-    } = syncState;
+    const { stage, status } = syncState;
+
+    currentStage = stage;
 
     if (status === 'running') {
       logger('Bulk sync is already running. Starting again may cause errors.');
@@ -230,26 +226,56 @@ const bulkSync: (
       }
 
       await aha.account.setExtensionField(IDENTIFIER, 'syncStage', 0);
+      currentStage = 0;
     }
 
     if (status === 'complete') {
       const shouldSkip = await prompter(
-        'Would you like to re-fetch statuses, projects, and suites?',
+        'Would you like to re-run initial sync? This will fetch statuses, projects, suites and historical data again',
         {
           placeholder: 'Y/N',
         }
       );
 
-      if (shouldSkip.toLowerCase() === 'y') {
+      if (shouldSkip.toLowerCase() !== 'y') {
         await aha.account.setExtensionField(
           IDENTIFIER,
           'syncStage',
           REPEATED_STAGES_START
         );
 
+        currentStage = REPEATED_STAGES_START;
+
         syncState.result = await repeatedSyncInitialResult();
       } else {
-        await aha.account.setExtensionField(IDENTIFIER, 'syncStage', 0);
+        const promises = [];
+        promises.push(
+          aha.account.setExtensionField(IDENTIFIER, 'syncStage', 0)
+        );
+        promises.push(
+          aha.account.clearExtensionField(IDENTIFIER, 'lastCaseSync')
+        );
+        promises.push(
+          aha.account.clearExtensionField(IDENTIFIER, 'lastRunSync')
+        );
+        promises.push(
+          aha.account.clearExtensionField(IDENTIFIER, 'lastPlanSync')
+        );
+        promises.push(
+          aha.account.clearExtensionField(IDENTIFIER, 'lastTestSync')
+        );
+        promises.push(
+          aha.account.clearExtensionField(IDENTIFIER, 'lastResultSync')
+        );
+
+        await Promise.all(promises);
+
+        currentStage = 0;
+        syncState.lastCaseSync = undefined;
+        syncState.lastRunSync = undefined;
+        syncState.lastPlanSync = undefined;
+        syncState.lastTestSync = undefined;
+        syncState.lastResultSync = undefined;
         syncState.result = {};
       }
     }
@@ -278,19 +304,15 @@ const bulkSync: (
       logger,
       prompter,
       domain,
-      lastCaseSync,
-      lastRunSync,
-      lastTestSync,
-      lastResultSync,
-      lastPlanSync,
+      lastCaseSync: syncState.lastCaseSync,
+      lastRunSync: syncState.lastRunSync,
+      lastTestSync: syncState.lastTestSync,
+      lastResultSync: syncState.lastResultSync,
+      lastPlanSync: syncState.lastPlanSync,
       result: syncState.result,
     };
 
-    for (
-      let currentStage = stage;
-      currentStage < stages.length;
-      currentStage++
-    ) {
+    for (; currentStage < stages.length; currentStage++) {
       const stage = stages[currentStage];
 
       const stageResult = await stage(input);
@@ -318,23 +340,39 @@ const bulkSync: (
     logger('Bulk sync completed successfully');
   } catch (error) {
     logger('An error occurred while running the wizard, aborting', true);
-    logger(`Error details: ${error.message}`, true);
+    logger(`Error details: ${error.message}\n`, true);
 
-    await cleanupBulkSync();
+    await cleanupBulkSync(currentStage);
   }
 };
 
-const cleanupBulkSync: () => Promise<void> = async () => {
+const cleanupBulkSync: (stage: SyncStage) => Promise<void> = async stage => {
   const promises = [];
 
+  promises.push(aha.account.clearExtensionField(IDENTIFIER, 'syncStage'));
   promises.push(aha.account.clearExtensionField(IDENTIFIER, 'syncProjectIds'));
   promises.push(aha.account.clearExtensionField(IDENTIFIER, 'syncSuiteIds'));
   promises.push(aha.account.clearExtensionField(IDENTIFIER, 'syncTestCaseIds'));
   promises.push(aha.account.clearExtensionField(IDENTIFIER, 'syncRunIds'));
   promises.push(aha.account.clearExtensionField(IDENTIFIER, 'syncPlanIds'));
-  promises.push(
-    aha.account.setExtensionField(IDENTIFIER, 'syncStatus', 'complete')
-  );
+
+  // Restart on failure
+  if (stage < MAX_STAGE) {
+    promises.push(
+      aha.account.setExtensionField(IDENTIFIER, 'syncStatus', 'pending')
+    );
+    promises.push(aha.account.clearExtensionField(IDENTIFIER, 'lastCaseSync'));
+    promises.push(aha.account.clearExtensionField(IDENTIFIER, 'lastRunSync'));
+    promises.push(aha.account.clearExtensionField(IDENTIFIER, 'lastPlanSync'));
+    promises.push(aha.account.clearExtensionField(IDENTIFIER, 'lastTestSync'));
+    promises.push(
+      aha.account.clearExtensionField(IDENTIFIER, 'lastResultSync')
+    );
+  } else {
+    promises.push(
+      aha.account.setExtensionField(IDENTIFIER, 'syncStatus', 'complete')
+    );
+  }
 
   await Promise.all(promises);
 };
@@ -344,7 +382,7 @@ const saveSyncResult: (
   stage: SyncStage
 ) => Promise<void> = async (result, stage) => {
   if (stage >= MAX_STAGE) {
-    return await cleanupBulkSync();
+    return await cleanupBulkSync(stage);
   }
 
   // Nothing was changed

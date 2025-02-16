@@ -56,7 +56,7 @@ const queryExtensionFields: (
       return result.extensionFields;
     };
 
-    promises.push(promise);
+    promises.push(promise(chunk));
   }
 
   return (await Promise.all(promises)).flat();
@@ -67,10 +67,10 @@ export const getAccountExtensionFieldMap: <T>(
 ) => Promise<{ [key: string]: T }> = async names => {
   const extensionFields = await queryExtensionFields(names);
 
-  return extensionFields.reduce(
-    (acc, field) => ({ ...acc, [field.name]: field.value }),
-    {}
-  );
+  return extensionFields.reduce((acc, field) => {
+    if (!field.value) return acc;
+    return { ...acc, [field.name]: field.value };
+  }, {});
 };
 
 const getAccountExtensionFields: <T>(
@@ -78,15 +78,15 @@ const getAccountExtensionFields: <T>(
 ) => Promise<T[]> = async names => {
   const extensionFields = await queryExtensionFields(names);
 
-  return extensionFields.map(field => field.value);
+  return extensionFields.map(field => field.value).filter(value => value);
 };
 
 export async function getStatuses(
-  statusIds: (string | undefined)[]
+  statusIds?: (string | undefined)[]
 ): Promise<Status[]> {
-  const filteredIds = statusIds.filter(id => id);
+  const filteredIds = statusIds?.filter(id => id);
 
-  if (filteredIds.length === 0) return [];
+  if (!filteredIds || filteredIds.length === 0) return [];
 
   const names = filteredIds.map(id => fieldName('Status', id));
 
@@ -94,11 +94,11 @@ export async function getStatuses(
 }
 
 export async function getProjects(
-  projectIds: (string | undefined)[]
+  projectIds?: (string | undefined)[]
 ): Promise<Project[]> {
-  const filteredIds = projectIds.filter(id => id);
+  const filteredIds = projectIds?.filter(id => id);
 
-  if (filteredIds.length === 0) return [];
+  if (!filteredIds || filteredIds.length === 0) return [];
 
   const names = filteredIds.map(id => fieldName('Project', id));
 
@@ -106,11 +106,11 @@ export async function getProjects(
 }
 
 export async function getSuites(
-  suiteIds: (string | undefined)[]
+  suiteIds?: (string | undefined)[]
 ): Promise<Suite[]> {
-  const filteredIds = suiteIds.filter(id => id);
+  const filteredIds = suiteIds?.filter(id => id);
 
-  if (filteredIds.length === 0) return [];
+  if (!filteredIds || filteredIds.length === 0) return [];
 
   const names = filteredIds.map(id => fieldName('Suite', id));
 
@@ -118,11 +118,11 @@ export async function getSuites(
 }
 
 export async function getTestCases(
-  caseIds: (string | undefined)[]
+  caseIds?: (string | undefined)[]
 ): Promise<TestCase[]> {
-  const filteredIds = caseIds.filter(id => id);
+  const filteredIds = caseIds?.filter(id => id);
 
-  if (filteredIds.length === 0) return [];
+  if (!filteredIds || filteredIds.length === 0) return [];
 
   const names = filteredIds.map(id => fieldName('TestCase', id));
 
@@ -151,11 +151,11 @@ export async function getLinkedComments(
 }
 
 export async function getTestRuns(
-  runIds: (string | undefined)[]
+  runIds?: (string | undefined)[]
 ): Promise<TestRun[]> {
-  const filteredIds = runIds.filter(id => id);
+  const filteredIds = runIds?.filter(id => id);
 
-  if (filteredIds.length === 0) return [];
+  if (!filteredIds || filteredIds.length === 0) return [];
 
   const names = filteredIds.map(id => fieldName('TestRun', id));
 
@@ -163,11 +163,11 @@ export async function getTestRuns(
 }
 
 export async function getTests(
-  testIds: (string | undefined)[]
+  testIds?: (string | undefined)[]
 ): Promise<Test[]> {
-  const filteredIds = testIds.filter(id => id);
+  const filteredIds = testIds?.filter(id => id);
 
-  if (filteredIds.length === 0) return [];
+  if (!filteredIds || filteredIds.length === 0) return [];
 
   const names = filteredIds.map(id => fieldName('Test', id));
 

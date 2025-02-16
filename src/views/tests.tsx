@@ -41,7 +41,6 @@ export async function getFeatureTabData(
   testIds: string[]
 ): Promise<FeatureTabData> {
   const testCases = await getTestCases(caseIds);
-
   const tests = await getTests(testIds);
 
   const testMap = tests.reduce(
@@ -221,6 +220,7 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
           </aha-button>
           {modalOpen && (
             <LinkTestCase
+              domain={domain}
               record={record}
               syncDelay={syncDelay}
               setOpen={setModalOpen}
