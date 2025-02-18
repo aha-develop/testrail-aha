@@ -1,17 +1,17 @@
 import { IDENTIFIER, Project } from '../../extension';
-import { waitForPagedLambda } from './interface';
-import { SyncProps, SyncResult } from './bulkSync';
+import { BaseSyncProps, waitForPagedLambda } from './interface';
 import { saveRecords } from '../extensionFields/updates';
 
-const syncProjects: (props: SyncProps) => Promise<SyncResult> = async ({
+const syncProjects: (props: BaseSyncProps) => Promise<Project[]> = async ({
   domain,
-  result,
   logger,
 }) => {
   logger('Beginning load of projects from TestRail');
 
-  const eventKey = 'syncProjects';
+  const now = Date.now();
+  const eventKey = `syncProjects-${now}`;
   const args = { domain };
+
   const lambdaFunc = async args => {
     await aha.triggerServer(`${IDENTIFIER}.syncProjects`, args);
   };
@@ -30,9 +30,10 @@ const syncProjects: (props: SyncProps) => Promise<SyncResult> = async ({
 
   logger('Saving projects to Aha!');
   await saveRecords<Project>(results);
+  await aha.account.setExtensionField(IDENTIFIER, 'lastProjectSync', now);
   logger('Successfully saved all projects');
 
-  return { ...result, projects: results };
+  return results;
 };
 
 export default syncProjects;

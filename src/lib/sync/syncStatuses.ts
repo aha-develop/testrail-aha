@@ -1,16 +1,17 @@
 import { IDENTIFIER, Status } from '../../extension';
-import { waitForLambda } from './interface';
-import { SyncProps, SyncResult } from './bulkSync';
+import { BaseSyncProps, waitForLambda } from './interface';
 import { saveRecords } from '../extensionFields/updates';
 
-const syncStatuses: (props: SyncProps) => Promise<SyncResult | null> = async ({
+const syncStatuses: (props: BaseSyncProps) => Promise<void> = async ({
   domain,
   logger,
 }) => {
   logger('Beginning load of statuses from TestRail');
 
-  const eventKey = 'syncStatuses';
+  const now = Date.now();
+  const eventKey = `syncStatuses-${now}`;
   const args = { domain };
+
   const lambdaFunc = async args => {
     await aha.triggerServer(`${IDENTIFIER}.syncStatuses`, args);
   };
@@ -29,9 +30,8 @@ const syncStatuses: (props: SyncProps) => Promise<SyncResult | null> = async ({
 
   logger('Saving statuses to Aha!');
   await saveRecords<Status>(apiResult.result);
+  await aha.account.setExtensionField(IDENTIFIER, 'lastStatusSync', now);
   logger('Successfully saved all statuses');
-
-  return null;
 };
 
 export default syncStatuses;

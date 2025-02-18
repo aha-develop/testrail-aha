@@ -15,6 +15,11 @@ const CONCURRENCY = 4;
 
 export type LambdaResult = APIResult | PagedAPIResult;
 
+export type BaseSyncProps = {
+  domain: string;
+  logger: (message: string) => void;
+};
+
 type WaitProps = {
   eventKey: string; // Key the lambda will write to
   lambdaFunc: (props: { [key: string]: any }) => Promise<void>;

@@ -1,11 +1,10 @@
 import { IDENTIFIER, TestRun } from '../../extension';
 import { PagedAPIResult } from '../api';
-import { waitForLambda, waitForPagedLambda } from './interface';
-import { SyncProps, SyncResult, SyncLogger } from './bulkSync';
+import { BaseSyncProps, waitForLambda, waitForPagedLambda } from './interface';
 import { saveRecords } from '../extensionFields/updates';
 
-// We don't want to fetch more than a page of completed runs, to avoid loading up on historic data.
-const MAX_COMPLETED_RUNS = 250;
+// We don't want to fetch more than a page of completed runs per project, to avoid loading up on historic data.
+const NUM_COMPLETED_RUNS = 250;
 
 type FetchProps = {
   domain: string;
@@ -13,7 +12,12 @@ type FetchProps = {
   projectId: string;
   isCompleted: boolean;
   numRuns?: number;
-  logger: SyncLogger;
+  logger: (message: string) => void;
+};
+
+type SyncProps = BaseSyncProps & {
+  projectIds: string[];
+  lastRunSync?: number;
 };
 
 const fetchRuns: (props: FetchProps) => Promise<TestRun[]> = async ({
@@ -21,10 +25,11 @@ const fetchRuns: (props: FetchProps) => Promise<TestRun[]> = async ({
   createdAfter,
   projectId,
   isCompleted,
-  numRuns,
   logger,
 }) => {
-  let eventKey = `syncRuns${isCompleted ? 'Completed' : ''}_${projectId}`;
+  let eventKey = `syncRuns${
+    isCompleted ? 'Completed' : ''
+  }_${projectId}-${Date.now()}`;
 
   const args = { domain, projectId };
 
@@ -32,9 +37,7 @@ const fetchRuns: (props: FetchProps) => Promise<TestRun[]> = async ({
     args['createdAfter'] = Math.floor(createdAfter / 1000);
   if (isCompleted) {
     args['isCompleted'] = 1;
-    args['limit'] = numRuns
-      ? Math.min(MAX_COMPLETED_RUNS, numRuns)
-      : MAX_COMPLETED_RUNS;
+    args['limit'] = NUM_COMPLETED_RUNS;
   } else {
     args['isCompleted'] = 0;
   }
@@ -73,16 +76,19 @@ const fetchRuns: (props: FetchProps) => Promise<TestRun[]> = async ({
   }
 };
 
-export const syncOpenRuns: (props: SyncProps) => Promise<SyncResult> = async ({
+export const syncOpenRuns: (props: SyncProps) => Promise<TestRun[]> = async ({
   domain,
-  result,
+  projectIds,
   lastRunSync,
   logger,
 }) => {
+  if (!projectIds?.length) {
+    throw new Error('No synced projects found, aborting open test run sync.');
+  }
+
   logger('Beginning load of open test runs from TestRail');
 
   const openRuns = [];
-  const projectIds = result.projects.map(project => project.id);
   const now = Date.now();
 
   for (const projectId of projectIds) {
@@ -104,49 +110,28 @@ export const syncOpenRuns: (props: SyncProps) => Promise<SyncResult> = async ({
   await aha.account.setExtensionField(IDENTIFIER, 'lastRunSync', now);
   logger('Successfully saved all open test runs');
 
-  return { ...result, runs: openRuns };
+  return openRuns;
 };
 
 export const syncCompletedRuns: (
   props: SyncProps
-) => Promise<SyncResult | null> = async ({
-  domain,
-  result,
-  logger,
-  prompter,
-}) => {
-  const shouldFetch = await prompter(
-    'Do you want to load completed test runs from TestRail?',
-    {
-      placeholder: 'Y/N',
-    }
-  );
-
-  if (shouldFetch.toLowerCase() !== 'y') {
-    logger('Skipping completed test run loading');
-    return null;
+) => Promise<TestRun[]> = async ({ domain, projectIds, logger }) => {
+  if (!projectIds?.length) {
+    throw new Error(
+      'No synced projects found, aborting completed test run sync.'
+    );
   }
-
-  const limit = Number.parseInt(
-    await prompter(
-      'How many completed test runs would you like to load per project? (max 250)',
-      {
-        default: '250',
-      }
-    )
-  );
 
   logger('Beginning load of completed test runs from TestRail');
 
   const completedRuns = [];
-  const projectIds = result.projects.map(project => project.id);
+  const now = Date.now();
 
   for (const projectId of projectIds) {
     const results = await fetchRuns({
       domain,
       projectId,
       isCompleted: true,
-      numRuns: limit,
       logger,
     });
 
@@ -157,7 +142,8 @@ export const syncCompletedRuns: (
 
   logger('Saving completed test runs to Aha!');
   await saveRecords<TestRun>(completedRuns);
+  await aha.account.setExtensionField(IDENTIFIER, 'lastCompletedRunSync', now);
   logger('Successfully saved all completed test runs');
 
-  return { ...result, runs: [...result.runs, ...completedRuns] };
+  return completedRuns;
 };

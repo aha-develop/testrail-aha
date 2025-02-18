@@ -20,16 +20,14 @@
             "Requirement",
             "Epic"
           ]
-        }
-      },
-      "commands": {
-        "createField": {
-          "title": "Create TestRail Field",
-          "entryPoint": "src/commands/createField.ts"
         },
-        "bulkSync": {
-          "title": "Bulk sync data from TestRail",
-          "entryPoint": "src/commands/bulkSync.ts"
+        "syncing": {
+          "title": "TestRail Syncing",
+          "entryPoint": "src/views/syncing.tsx",
+          "host": "page",
+          "location": {
+            "menu": "Work"
+          }
         }
       },
       "events": {

@@ -61,7 +61,7 @@ const SmartSpinner: React.FC<Props> = ({ record, eventKey }) => {
   return (
     <div className='spinner'>
       {loading && <aha-spinner size='3ex' />}
-      {!loading && error && <span className='spinner-error'>{message}</span>}
+      {!loading && error && <span className='error'>{message}</span>}
       {!loading && !error && <span>{message}</span>}
     </div>
   );

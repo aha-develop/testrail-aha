@@ -1,19 +1,22 @@
 import { IDENTIFIER, Test } from '../../extension';
-import { waitForPagedLambda } from './interface';
-import { SyncProps } from './bulkSync';
+import { BaseSyncProps, waitForPagedLambda } from './interface';
 import { saveRecords } from '../extensionFields/updates';
 
-const syncTests: (props: SyncProps) => Promise<null> = async ({
+type SyncProps = BaseSyncProps & {
+  lastTestSync?: number;
+  runIds: string[];
+};
+
+const syncTests: (props: SyncProps) => Promise<Test[]> = async ({
   domain,
   lastTestSync,
-  result,
+  runIds,
   logger,
 }) => {
   const tests: Test[] = [];
-  const runIds = result.runs?.map(run => run.id);
 
-  if (!runIds || runIds.length === 0) {
-    return null; // No runs to sync tests for
+  if (!runIds?.length) {
+    throw new Error('No synced test runs found, aborting test sync.');
   }
 
   logger('Beginning load of tests from TestRail');
@@ -21,7 +24,7 @@ const syncTests: (props: SyncProps) => Promise<null> = async ({
   const now = Date.now();
 
   for (const runId of runIds) {
-    const eventKey = `syncTests_${runId}`;
+    const eventKey = `syncTests_${runId}-${now}`;
     const args = { domain, runId };
 
     if (lastTestSync) args['updatedAfter'] = Math.floor(lastTestSync / 1000);
@@ -53,8 +56,7 @@ const syncTests: (props: SyncProps) => Promise<null> = async ({
   await aha.account.setExtensionField(IDENTIFIER, 'lastTestSync', now);
   logger('Successfully saved all tests');
 
-  // No need to return tests as they aren't used by any other syncing steps
-  return null;
+  return tests;
 };
 
 export default syncTests;

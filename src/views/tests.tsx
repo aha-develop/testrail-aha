@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import moment from 'moment';
 import { IDENTIFIER, TestCase, Test, Status } from '../extension';
 import {
   getTestCases,
@@ -8,6 +7,7 @@ import {
   getStatuses,
 } from '../lib/extensionFields/queries';
 import { unlinkTestCase } from '../lib/extensionFields/updates';
+import { timeAgo } from '../lib/util';
 import RecordLink from '../components/RecordLink';
 import { Styles } from '../components/Styles';
 import LinkTestCase from '../components/LinkTestCase';
@@ -71,12 +71,6 @@ function createTestCase() {
 
 function syncWithTestRail() {
   alert('Syncing with TestRail is not yet implemented');
-}
-
-function lastUpdatedAt(timestamp: number | null) {
-  if (!timestamp) return 'never';
-
-  return moment(timestamp).fromNow();
 }
 
 const openLinkModal = (setModalOpen, setSpinner) => {
@@ -234,8 +228,8 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
           </aha-button>
         </div>
         <div className='tab-header-right'>
-          <span className='text-light'>
-            Last updated: {lastUpdatedAt(lastSynced)}
+          <span className='text-small text-light'>
+            Last updated: {timeAgo(lastSynced)}
           </span>
           <aha-button onClick={syncWithTestRail} size='mini' kind='link'>
             Refresh

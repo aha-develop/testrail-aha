@@ -1,4 +1,5 @@
 import {
+  IDENTIFIER,
   Project,
   Suite,
   TestCase,
@@ -6,6 +7,7 @@ import {
   Test,
   Status,
   TestRailRecord,
+  TestResult,
 } from '../../extension';
 
 // Guard against overloading the GQL by fetching thousands of records at once.
@@ -28,6 +30,48 @@ export const fieldName: (kind: TestRailRecord['kind'], id: string) => string = (
       return `run_${id}`;
     case 'Test':
       return `test_${id}`;
+  }
+};
+
+// To minimize the size of the index extension fields, we use multiple indexes
+// scoped by parent record.
+export const indexKeyForRecord: (
+  record: TestRailRecord | TestResult
+) => string = record => {
+  switch (record.kind) {
+    case 'Status':
+    case 'Project':
+      return indexKeyForKindAndParent(record.kind);
+    case 'Suite':
+    case 'TestCase':
+    case 'TestRun':
+      return indexKeyForKindAndParent(record.kind, record.projectId);
+    case 'Test':
+      return indexKeyForKindAndParent(record.kind, record.runId);
+    case 'TestResult':
+      return indexKeyForKindAndParent(record.kind, record.testId);
+  }
+};
+
+export const indexKeyForKindAndParent: (
+  kind: TestRailRecord['kind'] | 'TestResult',
+  parentId?: string
+) => string = (kind, parentId) => {
+  switch (kind) {
+    case 'Status':
+      return `statusIds`;
+    case 'Project':
+      return `projectIds`;
+    case 'Suite':
+      return `project_${parentId}_suiteIds`;
+    case 'TestCase':
+      return `project_${parentId}_caseIds`;
+    case 'TestRun':
+      return `project_${parentId}_runIds`;
+    case 'Test':
+      return `run_${parentId}_testIds`;
+    case 'TestResult':
+      return `test_${parentId}_comment`;
   }
 };
 
@@ -117,6 +161,20 @@ export async function getSuites(
   return await getAccountExtensionFields<Suite>(names);
 }
 
+export async function getSuiteIdsForProject(
+  project: Project
+): Promise<string[]> {
+  if (project.suite_mode === 1) return [];
+
+  const key = indexKeyForKindAndParent('Suite', project.id);
+  const suiteIds = await aha.account.getExtensionField<string[]>(
+    IDENTIFIER,
+    key
+  );
+
+  return suiteIds ?? [];
+}
+
 export async function getTestCases(
   caseIds?: (string | undefined)[]
 ): Promise<TestCase[]> {
@@ -160,6 +218,32 @@ export async function getTestRuns(
   const names = filteredIds.map(id => fieldName('TestRun', id));
 
   return await getAccountExtensionFields<TestRun>(names);
+}
+
+export async function getRecentRunIds(lastSynced?: number): Promise<string[]> {
+  const projectIds = await aha.account.getExtensionField<string[]>(
+    IDENTIFIER,
+    'projectIds'
+  );
+
+  if (!projectIds || projectIds.length === 0) return [];
+
+  const runIdPromises: Promise<string[] | undefined>[] = [];
+
+  for (const projectId of projectIds) {
+    const key = indexKeyForKindAndParent('TestRun', projectId);
+    runIdPromises.push(
+      aha.account.getExtensionField<string[]>(IDENTIFIER, key)
+    );
+  }
+
+  const runIds = (await Promise.all(runIdPromises)).flat();
+
+  let runs = await getTestRuns(runIds);
+
+  if (lastSynced) runs = runs.filter(run => run.lastSynced > lastSynced);
+
+  return runs.map(run => run.id);
 }
 
 export async function getTests(

@@ -1,41 +1,20 @@
-import { waitForPagedLambda } from './interface';
-import { SyncLogger, SyncProps, SyncResult } from './bulkSync';
+import { BaseSyncProps, waitForPagedLambda } from './interface';
 import { saveRecords } from '../extensionFields/updates';
-import { IDENTIFIER, Project, Suite, TestCase } from '../../extension';
+import { IDENTIFIER, TestCase } from '../../extension';
 
 type FetchProps = {
   domain: string;
   updatedAfter?: number;
   projectId: string;
   suiteId?: string;
-  logger: SyncLogger;
+  logger: (message: string) => void;
 };
 
-type MapProps = {
-  projects: Project[];
-  suites: Suite[];
-};
-
-const mapProjectSuites: (props: MapProps) => {
-  [projectId: string]: string[];
-} = ({ projects, suites }) => {
-  const projectSuites = {};
-
-  for (const suite of suites) {
-    if (!projectSuites[suite.projectId]) {
-      projectSuites[suite.projectId] = [];
-    }
-
-    projectSuites[suite.projectId].push(suite.id);
-  }
-
-  for (const project of projects) {
-    if (!projectSuites[project.id]) {
-      projectSuites[project.id] = [];
-    }
-  }
-
-  return projectSuites;
+type SyncProps = BaseSyncProps & {
+  lastCaseSync: number;
+  projectSuites: {
+    [projectId: string]: string[];
+  };
 };
 
 const fetchCases: (props: FetchProps) => Promise<TestCase[]> = async ({
@@ -45,7 +24,7 @@ const fetchCases: (props: FetchProps) => Promise<TestCase[]> = async ({
   suiteId,
   logger,
 }) => {
-  let eventKey = `syncCases_${projectId}`;
+  let eventKey = `syncCases_${projectId}-${Date.now()}`;
   if (suiteId) eventKey += `_${suiteId}`;
 
   const args = { domain, projectId };
@@ -73,22 +52,19 @@ const fetchCases: (props: FetchProps) => Promise<TestCase[]> = async ({
   });
 };
 
-const syncCases: (props: SyncProps) => Promise<SyncResult> = async ({
+const syncCases: (props: SyncProps) => Promise<TestCase[]> = async ({
   domain,
   lastCaseSync,
-  result,
+  projectSuites,
   logger,
 }) => {
+  if (Object.keys(projectSuites).length === 0) {
+    throw new Error('No synced projects found, aborting test case sync.');
+  }
+
   logger('Beginning load of test cases from TestRail');
 
-  const { projects, suites } = result;
-
   const testCases: TestCase[] = [];
-  const projectSuites = mapProjectSuites({
-    projects: projects ?? [],
-    suites: suites ?? [],
-  });
-
   const now = Date.now();
 
   for (const projectId in projectSuites) {
@@ -124,7 +100,7 @@ const syncCases: (props: SyncProps) => Promise<SyncResult> = async ({
   await aha.account.setExtensionField(IDENTIFIER, 'lastCaseSync', now);
   logger('Successfully saved all test cases');
 
-  return { ...result, testCases };
+  return testCases;
 };
 
 export default syncCases;

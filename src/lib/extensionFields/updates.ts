@@ -1,6 +1,10 @@
 import { IDENTIFIER, TestRailRecord, TestResult } from '../../extension';
 import { ExtensionRecord } from '../extensionRecord';
-import { fieldName, getAccountExtensionFieldMap } from './queries';
+import {
+  fieldName,
+  indexKeyForRecord,
+  getAccountExtensionFieldMap,
+} from './queries';
 
 export async function linkTestCase(record: ExtensionRecord, caseId: string) {
   let caseIds = await record.getExtensionField<string[]>(IDENTIFIER, 'caseIds');
@@ -83,29 +87,6 @@ const updateIndex: <T extends TestRailRecord>(
     key,
     Array.from(new Set(allIds))
   );
-};
-
-// To minimize the size of the index extension fields, we use multiple indexes
-// scoped by parent record.
-const indexKeyForRecord: (
-  record: TestRailRecord | TestResult
-) => string = record => {
-  switch (record.kind) {
-    case 'Status':
-      return `statusIds`;
-    case 'Project':
-      return `projectIds`;
-    case 'Suite':
-      return `project_${record.projectId}_suiteIds`;
-    case 'TestCase':
-      return `project_${record.projectId}_caseIds`;
-    case 'TestRun':
-      return `project_${record.projectId}_runIds`;
-    case 'Test':
-      return `run_${record.runId}_testIds`;
-    case 'TestResult':
-      return `test_${record.testId}_comment`;
-  }
 };
 
 export const linkResultsToTests = async (results: TestResult[]) => {

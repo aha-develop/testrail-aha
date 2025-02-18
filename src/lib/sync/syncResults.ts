@@ -1,27 +1,30 @@
 import { IDENTIFIER, TestResult } from '../../extension';
-import { waitForPagedLambda } from './interface';
-import { SyncProps } from './bulkSync';
+import { BaseSyncProps, waitForPagedLambda } from './interface';
 import { linkResultsToTests } from '../extensionFields/updates';
 
-const syncResults: (props: SyncProps) => Promise<null> = async ({
+type SyncProps = BaseSyncProps & {
+  lastResultSync?: number;
+  runIds: string[];
+};
+
+const syncResults: (props: SyncProps) => Promise<TestResult[]> = async ({
   domain,
   lastResultSync,
-  result,
+  runIds,
   logger,
 }) => {
-  const testResults: TestResult[] = [];
-  const runIds = result.runs.map(run => run.id);
-
-  if (!runIds || runIds.length === 0) {
-    return null; // No runs to sync results for
+  if (!runIds?.length) {
+    throw new Error('No synced test runs found, aborting test result sync.');
   }
+
+  const testResults: TestResult[] = [];
 
   logger('Beginning load of test results from TestRail');
 
   const now = Date.now();
 
   for (const runId of runIds) {
-    const eventKey = `wizardResults_${runId}`;
+    const eventKey = `wizardResults_${runId}-${now}`;
     const args = { domain, runId };
 
     if (lastResultSync)
@@ -54,7 +57,7 @@ const syncResults: (props: SyncProps) => Promise<null> = async ({
   await aha.account.setExtensionField(IDENTIFIER, 'lastResultSync', now);
   logger('Successfully linked test results');
 
-  return null;
+  return testResults;
 };
 
 export default syncResults;
