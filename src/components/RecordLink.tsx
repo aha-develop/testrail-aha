@@ -25,6 +25,8 @@ const RecordLink: React.FC<Props> = ({ record, domain }) => {
       url = `https://${domain}.testrail.io/index.php?/tests/view/${record.id}`;
       prefix = 'T';
       break;
+    default:
+      throw new Error(`Unsupported record type for link: ${record.kind}`);
   }
 
   return (

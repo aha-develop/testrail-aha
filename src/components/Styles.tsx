@@ -9,9 +9,12 @@ export const Styles = () => {
           font-family: Inter, Helvetica, Segoe UI, Arial, sans-serif !important;
         }
 
+        .text-small {
+          font-size: 10px;
+        }
+
         .text-light {
           color: #666666;
-          font-size: 10px;
         }
 
         .tab-header {
@@ -72,8 +75,54 @@ export const Styles = () => {
           justify-content: center;
         }
 
-        .spinner-error {
+        .error {
           color: #c9250e;
+        }
+
+        .sections {
+          background-color: var(--theme-secondary-background);
+          display: flex;
+          padding: 16px;
+          gap: 18px;
+          flex-wrap: wrap;
+          justify-content: space-between;
+        }
+
+        .sections section {
+          background: var(--theme-primary-background);
+          border: 1px solid var(--theme-primary-border);
+          box-shadow: 0px 0px 8px rgba(0, 0, 0, 0.08);
+          border-radius: 4px;
+          display: flex;
+          flex-direction: column;
+          width: 800px;
+        }
+
+        .sections h2 {
+          border-bottom: 1px solid var(--theme-primary-border);
+          padding: 15px 21px;
+          margin: 0;
+
+          font-style: normal;
+          font-weight: 600;
+          font-size: 18px;
+          line-height: 18px;
+          color: var(--theme-primary-text);
+        }
+
+        .sections .subsection {
+          padding: 21px 26px;
+          display: flex;
+          flex-direction: row;
+          gap: 20px;
+          align-items: center;
+        }
+
+        .sections h3 {
+          font-style: normal;
+          font-weight: bold;
+          font-size: 18px;
+          line-height: 21px;
         }
       `}
     </style>

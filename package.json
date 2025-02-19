@@ -20,12 +20,14 @@
             "Requirement",
             "Epic"
           ]
-        }
-      },
-      "commands": {
-        "createField": {
-          "title": "Create TestRail Field",
-          "entryPoint": "src/commands/createField.ts"
+        },
+        "syncing": {
+          "title": "TestRail Syncing",
+          "entryPoint": "src/views/syncing.tsx",
+          "host": "page",
+          "location": {
+            "menu": "Work"
+          }
         }
       },
       "events": {
@@ -34,6 +36,69 @@
           "entryPoint": "src/events/linkTestCase.ts",
           "handles": [
             "aha-develop.testrail-aha.linkTestCase"
+          ]
+        },
+        "syncStatuses": {
+          "title": "Sync Statuses",
+          "entryPoint": "src/events/syncStatuses.ts",
+          "handles": [
+            "aha-develop.testrail-aha.syncStatuses"
+          ]
+        },
+        "syncProjects": {
+          "title": "Sync Projects",
+          "entryPoint": "src/events/syncProjects.ts",
+          "handles": [
+            "aha-develop.testrail-aha.syncProjects"
+          ]
+        },
+        "syncSuites": {
+          "title": "Sync Suites",
+          "entryPoint": "src/events/syncSuites.ts",
+          "handles": [
+            "aha-develop.testrail-aha.syncSuites"
+          ]
+        },
+        "syncCases": {
+          "title": "Sync Test Cases",
+          "entryPoint": "src/events/syncCases.ts",
+          "handles": [
+            "aha-develop.testrail-aha.syncCases"
+          ]
+        },
+        "syncRuns": {
+          "title": "Sync Test Runs",
+          "entryPoint": "src/events/syncRuns.ts",
+          "handles": [
+            "aha-develop.testrail-aha.syncRuns"
+          ]
+        },
+        "syncPlans": {
+          "title": "Sync Test Plans",
+          "entryPoint": "src/events/syncPlans.ts",
+          "handles": [
+            "aha-develop.testrail-aha.syncPlans"
+          ]
+        },
+        "syncRunsForPlan": {
+          "title": "Sync Test Runs for Test Plan",
+          "entryPoint": "src/events/syncRunsForPlan.ts",
+          "handles": [
+            "aha-develop.testrail-aha.syncRunsForPlan"
+          ]
+        },
+        "syncTests": {
+          "title": "Sync Tests",
+          "entryPoint": "src/events/syncTests.ts",
+          "handles": [
+            "aha-develop.testrail-aha.syncTests"
+          ]
+        },
+        "syncResults": {
+          "title": "Sync Test Results",
+          "entryPoint": "src/events/syncResults.ts",
+          "handles": [
+            "aha-develop.testrail-aha.syncResults"
           ]
         }
       },
