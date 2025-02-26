@@ -1,10 +1,6 @@
 import React from 'react';
 import { IDENTIFIER } from '../../extension';
 import syncSuites from '../../lib/sync/syncSuites';
-import {
-  getProjects,
-  indexKeyForKindAndParent,
-} from '../../lib/extensionFields/queries';
 import BaseSection, { SectionProps, ResyncProps } from './BaseSection';
 
 const resync: (props: ResyncProps) => Promise<void> = async ({
@@ -24,7 +20,7 @@ const resync: (props: ResyncProps) => Promise<void> = async ({
     const projectIds =
       (await aha.account.getExtensionField<string[]>(
         IDENTIFIER,
-        indexKeyForKindAndParent('Suite')
+        'projectIds'
       )) ?? [];
 
     if (projectIds.length === 0) {
@@ -32,18 +28,12 @@ const resync: (props: ResyncProps) => Promise<void> = async ({
       return;
     }
 
-    const projects = await getProjects(projectIds);
-
-    const projectsWithSuites = projects.filter(
-      project => project.suite_mode !== 1
-    );
-
     const now = Date.now();
 
     await syncSuites({
       domain,
       logger: setMessage,
-      projectIds: projectsWithSuites.map(project => project.id),
+      projectIds,
     });
     await setLastSync(now);
   } catch (error) {

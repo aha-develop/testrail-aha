@@ -36,6 +36,7 @@ const syncSuites: (props: SyncProps) => Promise<Suite[]> = async ({
     args: { domain },
     eventKey,
     usePage: false,
+    isPaginated: false,
     idKey: 'projectId',
     ids: projectIds,
   });

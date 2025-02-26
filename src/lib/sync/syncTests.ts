@@ -1,5 +1,5 @@
 import { IDENTIFIER, Test } from '../../extension';
-import { BaseSyncProps, waitForPagedLambda } from './interface';
+import { BaseSyncProps, waitForIndexedLambda } from './interface';
 import { saveRecords } from '../extensionFields/updates';
 
 type SyncProps = BaseSyncProps & {
@@ -13,41 +13,38 @@ const syncTests: (props: SyncProps) => Promise<Test[]> = async ({
   runIds,
   logger,
 }) => {
-  const tests: Test[] = [];
-
   if (!runIds?.length) {
-    throw new Error('No synced test runs found, aborting test sync.');
+    logger('No synced test runs found, aborting test result sync.');
+    return [];
   }
 
   logger('Beginning load of tests from TestRail');
 
   const now = Date.now();
 
-  for (const runId of runIds) {
-    const eventKey = `syncTests_${runId}-${now}`;
-    const args = { domain, runId };
+  const eventKey = `syncTests-${now}`;
+  const args = { domain };
 
-    if (lastTestSync) args['updatedAfter'] = Math.floor(lastTestSync / 1000);
+  if (lastTestSync) args['updatedAfter'] = Math.floor(lastTestSync / 1000);
 
-    const lambdaFunc = async args => {
-      await aha.triggerServer(`${IDENTIFIER}.syncTests`, args);
-    };
+  const lambdaFunc = async args => {
+    await aha.triggerServer(`${IDENTIFIER}.syncTests`, args);
+  };
 
-    const progressFunc = async (firstPage, lastPage) => {
-      logger(
-        `Fetching tests for run ${runId}, pages ${firstPage} to ${lastPage}...`
-      );
-    };
+  const progressFunc = async (firstPage, lastPage) => {
+    logger(`Fetching tests, pages ${firstPage} to ${lastPage}...`);
+  };
 
-    const results = await waitForPagedLambda<Test>({
-      lambdaFunc,
-      progressFunc,
-      args,
-      eventKey,
-    });
+  const argFunc = (index: number) => ({ runId: runIds[index] });
 
-    tests.push(...results);
-  }
+  const tests = await waitForIndexedLambda<Test>({
+    lambdaFunc,
+    progressFunc,
+    args,
+    eventKey,
+    argFunc,
+    numIds: runIds.length,
+  });
 
   logger('Successfully fetched all tests');
 

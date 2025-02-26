@@ -1,18 +1,13 @@
 import { IDENTIFIER, TestRun } from '../../extension';
-import { PagedAPIResult } from '../api';
-import { BaseSyncProps, waitForLambda, waitForPagedLambda } from './interface';
+import {
+  BaseSyncProps,
+  waitForPagedLambda,
+  waitForIndexedLambda,
+} from './interface';
 import { saveRecords } from '../extensionFields/updates';
 
 // We don't want to fetch more than a page of completed plans, to avoid loading up on historic data.
 const NUM_COMPLETED_PLANS = 250;
-
-type FetchProps = {
-  domain: string;
-  createdAfter?: number;
-  projectId: string;
-  isCompleted: boolean;
-  logger: (message: string) => void;
-};
 
 type SyncPlanProps = BaseSyncProps & {
   lastPlanSync?: number;
@@ -25,62 +20,6 @@ type SyncCompletedProps = BaseSyncProps & {
 
 type SyncRunProps = BaseSyncProps & {
   planIds: string[];
-};
-
-const fetchPlanIds: (props: FetchProps) => Promise<string[]> = async ({
-  domain,
-  createdAfter,
-  projectId,
-  isCompleted,
-  logger,
-}) => {
-  let eventKey = `syncPlans${
-    isCompleted ? 'Completed' : ''
-  }_${projectId}-${Date.now()}`;
-
-  const args = { domain, projectId };
-
-  if (createdAfter && !isCompleted)
-    args['createdAfter'] = Math.floor(createdAfter / 1000);
-  if (isCompleted) {
-    args['isCompleted'] = 1;
-    args['limit'] = NUM_COMPLETED_PLANS;
-  } else {
-    args['isCompleted'] = 0;
-  }
-
-  const lambdaFunc = async args => {
-    await aha.triggerServer(`${IDENTIFIER}.syncPlans`, args);
-  };
-
-  if (isCompleted) {
-    logger(`Fetching completed test plans for project ${projectId}...`);
-
-    const apiResult = await waitForLambda<PagedAPIResult>({
-      lambdaFunc,
-      args,
-      eventKey,
-    });
-
-    if (apiResult.error) {
-      throw new Error(apiResult.message);
-    } else {
-      return apiResult.result.result as string[];
-    }
-  } else {
-    const progressFunc = async (firstPage, lastPage) => {
-      logger(
-        `Fetching open test plans, pages ${firstPage} to ${lastPage} for project ${projectId}...`
-      );
-    };
-
-    return await waitForPagedLambda<string>({
-      lambdaFunc,
-      progressFunc,
-      args,
-      eventKey,
-    });
-  }
 };
 
 export const syncOpenPlans: (
@@ -97,20 +36,32 @@ export const syncOpenPlans: (
 
   logger('Beginning load of open test plans from TestRail');
 
-  const openPlans: string[] = [];
   const now = Date.now();
 
-  for (const projectId of projectIds) {
-    const results = await fetchPlanIds({
-      domain,
-      projectId,
-      isCompleted: false,
-      createdAfter: lastPlanSync,
-      logger,
-    });
+  let eventKey = `syncPlans-${Date.now()}`;
 
-    openPlans.push(...results);
-  }
+  const args = { domain, isCompleted: 0 };
+
+  if (lastPlanSync) args['createdAfter'] = Math.floor(lastPlanSync / 1000);
+
+  const lambdaFunc = async args => {
+    await aha.triggerServer(`${IDENTIFIER}.syncPlans`, args);
+  };
+
+  const progressFunc = async (firstPage, lastPage) => {
+    logger(`Fetching open test plans, pages ${firstPage} to ${lastPage}...`);
+  };
+
+  const argFunc = (index: number) => ({ projectId: projectIds[index] });
+
+  const openPlans = await waitForIndexedLambda<string>({
+    lambdaFunc,
+    progressFunc,
+    args,
+    eventKey,
+    argFunc,
+    numIds: projectIds.length,
+  });
 
   logger('Successfully fetched all open test plans');
 
@@ -131,24 +82,36 @@ export const syncCompletedPlans: (
 
   logger('Beginning load of completed test plans from TestRail');
 
-  const completedRuns: string[] = [];
   const now = Date.now();
 
-  for (const projectId of projectIds) {
-    const results = await fetchPlanIds({
-      domain,
-      projectId,
-      isCompleted: true,
-      logger,
-    });
+  let eventKey = `syncCompletedPlans-${Date.now()}`;
 
-    completedRuns.push(...results);
-  }
+  const args = { domain, isCompleted: 1, limit: NUM_COMPLETED_PLANS };
+
+  const lambdaFunc = async args => {
+    await aha.triggerServer(`${IDENTIFIER}.syncPlans`, args);
+  };
+
+  const progressFunc = async (firstPage, lastPage) => {
+    logger(
+      `Fetching completed test plans, pages ${firstPage} to ${lastPage}...`
+    );
+  };
+
+  const planIds = await waitForPagedLambda<string>({
+    lambdaFunc,
+    progressFunc,
+    args,
+    eventKey,
+    usePage: false,
+    idKey: 'projectId',
+    ids: projectIds,
+  });
 
   logger('Successfully fetched all completed test plans');
 
   await aha.account.setExtensionField(IDENTIFIER, 'lastCompletedPlanSync', now);
-  return await syncRunsForPlan({ domain, planIds: completedRuns, logger });
+  return await syncRunsForPlan({ domain, planIds, logger });
 };
 
 const syncRunsForPlan: (props: SyncRunProps) => Promise<TestRun[]> = async ({
@@ -163,7 +126,7 @@ const syncRunsForPlan: (props: SyncRunProps) => Promise<TestRun[]> = async ({
 
   logger('Beginning load of test runs for plans from TestRail.');
 
-  const eventKey = 'syncPlanRuns';
+  const eventKey = `syncPlanRuns-${Date.now()}`;
 
   const lambdaFunc = async args => {
     await aha.triggerServer(`${IDENTIFIER}.syncRunsForPlan`, args);
@@ -181,6 +144,7 @@ const syncRunsForPlan: (props: SyncRunProps) => Promise<TestRun[]> = async ({
     args: { domain },
     eventKey,
     usePage: false,
+    isPaginated: false,
     idKey: 'planId',
     ids: planIds,
   });

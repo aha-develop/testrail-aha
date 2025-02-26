@@ -1,7 +1,7 @@
 import { IDENTIFIER, Status } from '../extension';
 import { fetchTestRail, logResult, BaseParams } from '../lib/api';
 
-const syncStatuses: (props: BaseParams) => void = async ({
+export const syncStatuses: (props: BaseParams) => Promise<void> = async ({
   domain,
   record,
   eventKey,

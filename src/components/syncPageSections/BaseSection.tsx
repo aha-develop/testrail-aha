@@ -41,6 +41,10 @@ const BaseSection: React.FC<BaseSectionProps> = ({
   const [lastSync, setLastSync] = useState<number | null>(null);
   const [syncAll, setSyncAll] = useState(false);
 
+  // Make sure if state update is slow, we don't use stale values
+  let cachedLastSync = lastSync;
+  let cachedSyncAll = syncAll;
+
   const setSyncState = (syncing: boolean) => {
     setDisabled(syncing);
     setSyncing(syncing);
@@ -55,7 +59,9 @@ const BaseSection: React.FC<BaseSectionProps> = ({
 
       if (actualLastSync) {
         setLastSync(actualLastSync);
+        cachedLastSync = actualLastSync;
       } else if (hasToggle) {
+        cachedSyncAll = true;
         setSyncAll(true);
       }
 
@@ -65,6 +71,21 @@ const BaseSection: React.FC<BaseSectionProps> = ({
     initLastSynced();
   }, []);
 
+  const clickHandler = () => {
+    setMessage(null);
+    setError(null);
+
+    resync({
+      domain,
+      setLoading,
+      setSyncing: setSyncState,
+      setMessage,
+      setError,
+      setLastSync,
+      lastSync: cachedSyncAll ? null : cachedLastSync,
+    });
+  };
+
   return (
     <section>
       <h2>{title}</h2>
@@ -73,36 +94,32 @@ const BaseSection: React.FC<BaseSectionProps> = ({
         {hasToggle && (
           <aha-radio-button-group>
             <aha-radio-button
-              selected={!syncAll}
-              disabled={lastSync ? null : true}
-              prevent-click={lastSync ? null : true}
+              selected={!cachedSyncAll}
+              disabled={cachedLastSync ? null : true}
+              prevent-click={cachedLastSync ? null : true}
               onClick={() => {
-                if (lastSync) setSyncAll(false);
+                if (cachedLastSync) {
+                  cachedSyncAll = false;
+                  setSyncAll(false);
+                }
               }}
             >
               Sync latest
             </aha-radio-button>
             <aha-radio-button
-              selected={syncAll}
-              onClick={() => setSyncAll(true)}
+              selected={cachedSyncAll}
+              onClick={() => {
+                setSyncAll(true);
+                cachedSyncAll = true;
+              }}
             >
               Sync all
             </aha-radio-button>
           </aha-radio-button-group>
         )}
         <aha-button
-          kind={syncAll ? 'danger' : 'primary'}
-          onClick={() =>
-            resync({
-              domain,
-              setLoading,
-              setSyncing: setSyncState,
-              setMessage,
-              setError,
-              setLastSync,
-              lastSync: syncAll ? null : lastSync,
-            })
-          }
+          kind={cachedSyncAll ? 'danger' : 'primary'}
+          onClick={clickHandler}
           disabled={syncing || disabled || loading ? true : null}
         >
           {loading
@@ -113,15 +130,15 @@ const BaseSection: React.FC<BaseSectionProps> = ({
             ? 'Waiting...'
             : 'Sync now'}
         </aha-button>
-        {lastSync && (
-          <div className='text-small text-light'>
-            Last synced: {timeAgo(lastSync)}
+        {cachedLastSync && (
+          <div className='text-small text-gray'>
+            Last synced: {timeAgo(cachedLastSync)}
           </div>
         )}
         {syncing && <aha-spinner />}
         <div>
-          {message && <span className='text-small text-light'>{message}</span>}
-          {error && <span className='text-small error'>{error}</span>}
+          {message && <span className='text-small text-gray'>{message}</span>}
+          {error && <span className='text-small text-error'>{error}</span>}
         </div>
       </div>
     </section>

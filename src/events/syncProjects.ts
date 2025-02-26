@@ -5,12 +5,9 @@ type SyncProjectsProps = BaseParams & {
   page?: number;
 };
 
-const syncProjects: (props: SyncProjectsProps) => void = async ({
-  domain,
-  record,
-  eventKey,
-  page,
-}) => {
+export const syncProjects: (
+  props: SyncProjectsProps
+) => Promise<void> = async ({ domain, record, eventKey, page }) => {
   try {
     console.log(`Beginning sync of TestRail projects page: ${page}`);
 

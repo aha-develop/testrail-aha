@@ -1,7 +1,7 @@
-import { IDENTIFIER, TestCase } from '../extension';
+import { IDENTIFIER, TestCase, Suite } from '../extension';
 import { isExtensionRecord } from '../lib/extensionRecord';
 import { BaseParams, fetchTestRail, logResult } from '../lib/api';
-import { linkTestCase } from '../lib/extensionFields/updates';
+import { linkTestCase, saveRecords } from '../lib/extensionFields/updates';
 import { fieldName } from '../lib/extensionFields/queries';
 
 type SyncTestCaseProps = BaseParams & {
@@ -28,25 +28,27 @@ const syncTestCase: (
 
     if (!json) return null; // Error already logged
 
-    // TODO: Once we have sprints hooked up to extensions and runs, we can use
-    // the record's sprint to get the most recent run for the test case.
-
-    const testCase = {
-      id: json.id,
-      kind: 'TestCase',
-      title: json.title,
-      lastSynced: Date.now(),
-    } as TestCase;
-
-    console.log(
-      `Test case fetched, storing in Aha! ${JSON.stringify(testCase)}`
-    );
-
-    aha.account.setExtensionField(
+    // Fetch the suite to get the project ID
+    const suite = await aha.account.getExtensionField<Suite>(
       IDENTIFIER,
-      fieldName('TestCase', caseId),
-      testCase
+      fieldName('Suite', json.suite_id)
     );
+
+    if (!suite) {
+      throw new Error(`Could not find suite ${json.suite_id} for case`);
+    }
+
+    const testCase: TestCase = {
+      id: json.id as string,
+      kind: 'TestCase',
+      title: json.title as string,
+      projectId: suite.projectId,
+      suiteId: json.suite_id as string,
+    };
+
+    console.log('Test case fetched, storing in Aha!');
+
+    await saveRecords<TestCase>([testCase]);
 
     return testCase;
   } catch (error) {
