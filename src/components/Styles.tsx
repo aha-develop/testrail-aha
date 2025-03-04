@@ -14,7 +14,19 @@ export const Styles = () => {
         }
 
         .text-light {
+          font-weight: 300;
+        }
+
+        .text-gray {
           color: #666666;
+        }
+
+        .text-error {
+          color: #c9250e;
+        }
+
+        .text-strong {
+          font-weight: bold;
         }
 
         .tab-header {
@@ -70,13 +82,10 @@ export const Styles = () => {
         }
 
         .spinner {
-          font-size: 12px;
           display: flex;
-          justify-content: center;
-        }
-
-        .error {
-          color: #c9250e;
+          gap: 0.5rem;
+          padding-top: 5px;
+          padding-left: 20px;
         }
 
         .sections {
@@ -123,6 +132,101 @@ export const Styles = () => {
           font-weight: bold;
           font-size: 18px;
           line-height: 21px;
+        }
+
+        .id-form {
+          display: flex;
+          gap: 0.5rem;
+          align-items: start;
+        }
+
+        .modal-form {
+          display: flex;
+          flex-direction: column;
+          gap: 1rem;
+        }
+
+        .search-form {
+          display: flex;
+          flex-direction: column;
+          gap: 24px;
+          padding-top: 10px;
+        }
+
+        .search-section {
+          display: flex;
+          flex-direction: column;
+          border-radius: 4px;
+          border: 1px solid #e1e1e1;
+          background-color: #f7f7f7;
+        }
+
+        .search-input {
+          padding: 8px 6px;
+        }
+
+        .search-results {
+          height: 250px;
+          overflow-y: auto;
+          border-top: 1px solid #e1e1e1;
+          padding: 6px 5px;
+        }
+
+        .search-row {
+          padding: 4px 6px;
+          min-height: 24px;
+          font-size: 12px;
+        }
+
+        .search-header {
+          line-height: 20px;
+          font-size: 12px;
+          font-weight: bold;
+        }
+
+        .search-result {
+          padding-left: 15px;
+          line-height: 16px;
+          display: flex;
+          gap: 10px;
+        }
+
+        .search-text {
+          display: flex;
+          gap: 4px;
+        }
+
+        .search-ref {
+          font-weight: 300;
+          color: #666666;
+        }
+
+        .form-loading {
+          display: flex;
+          gap: 0.5rem;
+          padding-bottom: 10px;
+        }
+
+        .sync-progress {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
+        .search-footer {
+          border-top: 1px solid #e1e1e1;
+          padding: 12px 15px;
+        }
+
+        .sync-message {
+          display: flex;
+          gap: 4px;
+        }
+
+        .sync-bar {
+          --aha-progress-bar--bar: #0073cf;
+          --aha-progress-bar--background: var(--aha-gray-300);
+          --Common--border-radius: 30px;
         }
       `}
     </style>

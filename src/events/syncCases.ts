@@ -44,15 +44,12 @@ const syncTestCases: (props: SyncTestCasesProps) => void = async ({
 
     if (!json) return; // Error already logged
 
-    const now = Date.now();
-
     const cases = json.cases.map(testCase => ({
       id: testCase.id,
       kind: 'TestCase',
-      projectId: testCase.project_id,
+      projectId: projectId, // Test cases API call doesn't return project ID
       suiteId: testCase.suite_id,
       title: testCase.title,
-      lastSynced: now,
     })) as TestCase[];
 
     const hasMore = json['_links']?.next !== null;

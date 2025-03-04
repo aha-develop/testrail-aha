@@ -2,8 +2,8 @@ import React from 'react';
 import { IDENTIFIER } from '../../extension';
 import syncCases from '../../lib/sync/syncCases';
 import {
-  getProjects,
-  getSuiteIdsForProject,
+  indexKeyForKindAndParent,
+  getAccountExtensionFieldMap,
 } from '../../lib/extensionFields/queries';
 import BaseSection, { SectionProps, ResyncProps } from './BaseSection';
 
@@ -27,24 +27,22 @@ const resync: (props: ResyncProps) => Promise<void> = async ({
         'projectIds'
       )) ?? [];
 
-    const projects = await getProjects(projectIds);
+    const keys = projectIds.map(projectId =>
+      indexKeyForKindAndParent('Suite', projectId)
+    );
+
     const projectSuites = {};
-    const suitePromises = [];
+    const suiteFields = await getAccountExtensionFieldMap<string[]>(keys);
 
-    for (const project of projects) {
-      projectSuites[project.id] = [];
+    for (const key in suiteFields) {
+      const projectId = key.split('_')[1];
 
-      if (project.suite_mode !== 1) {
-        suitePromises.push(
-          (async () => {
-            const suiteIds = await getSuiteIdsForProject(project);
-            projectSuites[project.id] = suiteIds;
-          })()
-        );
+      if (!projectSuites[projectId]) {
+        projectSuites[projectId] = [];
       }
-    }
 
-    await Promise.all(suitePromises);
+      projectSuites[projectId].push(...suiteFields[key]);
+    }
 
     const now = Date.now();
 

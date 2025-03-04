@@ -1,6 +1,6 @@
 import React from 'react';
 import syncResults from '../../lib/sync/syncResults';
-import { getRecentRunIds } from '../../lib/extensionFields/queries';
+import { getAllRunIds } from '../../lib/extensionFields/queries';
 import BaseSection, { SectionProps, ResyncProps } from './BaseSection';
 
 const resync: (props: ResyncProps) => Promise<void> = async ({
@@ -17,7 +17,7 @@ const resync: (props: ResyncProps) => Promise<void> = async ({
     setLoading(true);
     setMessage('Fetching test runs for test results...');
 
-    const runIds = await getRecentRunIds();
+    const runIds = await getAllRunIds();
     const now = Date.now();
 
     await syncResults({

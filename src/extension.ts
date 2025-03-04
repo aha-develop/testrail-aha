@@ -28,8 +28,6 @@ export type TestCase = {
   projectId: string;
   suiteId: string;
   title: string;
-  lastSynced: number;
-  fields: { [name: string]: any };
 };
 
 export type TestRun = {
@@ -38,17 +36,15 @@ export type TestRun = {
   projectId: string;
   suiteId: string;
   name: string;
-  lastSynced: number;
 };
 
 export type Test = {
   id: string;
   kind: 'Test';
-  name: string;
   caseId: string;
   runId: string;
   statusId: string;
-  lastSynced: number;
+  title: string;
 };
 
 export type TestResult = {

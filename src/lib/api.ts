@@ -17,14 +17,14 @@ export type PagedAPIResult = {
 type LogProps = {
   message: string;
   record: ExtensionRecord;
-  eventKey: string;
+  eventKey?: string;
   error: boolean;
   result?: any;
 };
 
 export type BaseParams = {
   domain: string;
-  eventKey: string;
+  eventKey?: string;
   record: ExtensionRecord;
 };
 
@@ -50,13 +50,15 @@ export const logResult: (props: LogProps) => void = async ({
     console.log(message);
   }
 
-  console.log('Sending result to Aha!');
+  if (eventKey) {
+    console.log('Sending result to Aha!');
 
-  await record.setExtensionField(IDENTIFIER, eventKey, {
-    error: error,
-    message: message,
-    result: result,
-  });
+    await record.setExtensionField(IDENTIFIER, eventKey, {
+      error: error,
+      message: message,
+      result: result,
+    });
+  }
 };
 
 const getHeaders: () => Headers = () => {

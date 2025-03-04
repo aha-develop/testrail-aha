@@ -97,7 +97,7 @@ const syncTestPlans: (props: SyncTestPlansProps) => void = async ({
 
     if (!json) return; // Error already logged
 
-    const planIds = json.plans.map(testPlan => testPlan.id) as String[];
+    const planIds = json.plans.map(testPlan => testPlan.id) as string[];
     const hasMore = json['_links']?.next !== null;
 
     await logResult({

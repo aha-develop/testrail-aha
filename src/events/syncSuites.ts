@@ -5,8 +5,8 @@ type SuiteProps = BaseParams & {
   projectId: string;
 };
 
-// Note all projects use suites - this should only be called for projects
-// that are not operating in single-suite mode (projects where suite_mode !== 1)
+// Note although some projects only have a single suite, we still need to fetch them
+// to act as a go-between for test cases (which don't return a project ID in the API response.)
 const syncSuites: (props: SuiteProps) => void = async ({
   domain,
   record,

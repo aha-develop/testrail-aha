@@ -1,4 +1,4 @@
-import { TestRun } from '../extension';
+import { IDENTIFIER, TestRun } from '../extension';
 import { fetchTestRail, logResult, BaseParams } from '../lib/api';
 
 type RunsForPlanProps = BaseParams & {
@@ -26,7 +26,6 @@ const syncTestRunsForPlan: (props: RunsForPlanProps) => void = async ({
     if (!json) return; // Error already logged
 
     const testRuns: TestRun[] = [];
-    const now = Date.now();
 
     for (const entry of json.entries) {
       for (const run of entry.runs) {
@@ -36,7 +35,6 @@ const syncTestRunsForPlan: (props: RunsForPlanProps) => void = async ({
           projectId: run.project_id,
           suiteId: run.suite_id,
           name: run.name,
-          lastSynced: now,
         });
       }
     }

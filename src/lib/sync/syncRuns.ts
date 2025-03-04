@@ -1,79 +1,17 @@
 import { IDENTIFIER, TestRun } from '../../extension';
-import { PagedAPIResult } from '../api';
-import { BaseSyncProps, waitForLambda, waitForPagedLambda } from './interface';
+import {
+  BaseSyncProps,
+  waitForPagedLambda,
+  waitForIndexedLambda,
+} from './interface';
 import { saveRecords } from '../extensionFields/updates';
 
 // We don't want to fetch more than a page of completed runs per project, to avoid loading up on historic data.
 const NUM_COMPLETED_RUNS = 250;
 
-type FetchProps = {
-  domain: string;
-  createdAfter?: number;
-  projectId: string;
-  isCompleted: boolean;
-  numRuns?: number;
-  logger: (message: string) => void;
-};
-
 type SyncProps = BaseSyncProps & {
   projectIds: string[];
   lastRunSync?: number;
-};
-
-const fetchRuns: (props: FetchProps) => Promise<TestRun[]> = async ({
-  domain,
-  createdAfter,
-  projectId,
-  isCompleted,
-  logger,
-}) => {
-  let eventKey = `syncRuns${
-    isCompleted ? 'Completed' : ''
-  }_${projectId}-${Date.now()}`;
-
-  const args = { domain, projectId };
-
-  if (createdAfter && !isCompleted)
-    args['createdAfter'] = Math.floor(createdAfter / 1000);
-  if (isCompleted) {
-    args['isCompleted'] = 1;
-    args['limit'] = NUM_COMPLETED_RUNS;
-  } else {
-    args['isCompleted'] = 0;
-  }
-
-  const lambdaFunc = async args => {
-    await aha.triggerServer(`${IDENTIFIER}.syncRuns`, args);
-  };
-
-  if (isCompleted) {
-    logger(`Fetching completed test runs for project ${projectId}...`);
-
-    const apiResult = await waitForLambda<PagedAPIResult>({
-      lambdaFunc,
-      args,
-      eventKey,
-    });
-
-    if (apiResult.error) {
-      throw new Error(apiResult.message);
-    } else {
-      return apiResult.result.result as TestRun[];
-    }
-  } else {
-    const progressFunc = async (firstPage, lastPage) => {
-      logger(
-        `Fetching open test runs, pages ${firstPage} to ${lastPage} for project ${projectId}...`
-      );
-    };
-
-    return await waitForPagedLambda<TestRun>({
-      lambdaFunc,
-      progressFunc,
-      args,
-      eventKey,
-    });
-  }
 };
 
 export const syncOpenRuns: (props: SyncProps) => Promise<TestRun[]> = async ({
@@ -88,20 +26,32 @@ export const syncOpenRuns: (props: SyncProps) => Promise<TestRun[]> = async ({
 
   logger('Beginning load of open test runs from TestRail');
 
-  const openRuns = [];
   const now = Date.now();
 
-  for (const projectId of projectIds) {
-    const results = await fetchRuns({
-      domain,
-      projectId,
-      logger,
-      isCompleted: false,
-      createdAfter: lastRunSync,
-    });
+  let eventKey = `syncRuns-${Date.now()}`;
 
-    openRuns.push(...results);
-  }
+  const args = { domain, isCompleted: 0 };
+
+  if (lastRunSync) args['createdAfter'] = Math.floor(lastRunSync / 1000);
+
+  const lambdaFunc = async args => {
+    await aha.triggerServer(`${IDENTIFIER}.syncRuns`, args);
+  };
+
+  const progressFunc = async (firstPage, lastPage) => {
+    logger(`Fetching open test runs, pages ${firstPage} to ${lastPage}...`);
+  };
+
+  const argFunc = (index: number) => ({ projectId: projectIds[index] });
+
+  const openRuns = await waitForIndexedLambda<TestRun>({
+    lambdaFunc,
+    progressFunc,
+    args,
+    eventKey,
+    argFunc,
+    numIds: projectIds.length,
+  });
 
   logger('Successfully fetched all open test runs');
 
@@ -124,19 +74,31 @@ export const syncCompletedRuns: (
 
   logger('Beginning load of completed test runs from TestRail');
 
-  const completedRuns = [];
   const now = Date.now();
 
-  for (const projectId of projectIds) {
-    const results = await fetchRuns({
-      domain,
-      projectId,
-      isCompleted: true,
-      logger,
-    });
+  let eventKey = `syncCompletedRuns-${Date.now()}`;
 
-    completedRuns.push(...results);
-  }
+  const args = { domain, isCompleted: 1, limit: NUM_COMPLETED_RUNS };
+
+  const lambdaFunc = async args => {
+    await aha.triggerServer(`${IDENTIFIER}.syncRuns`, args);
+  };
+
+  const progressFunc = async (firstPage, lastPage) => {
+    logger(
+      `Fetching completed test runs, pages ${firstPage} to ${lastPage}...`
+    );
+  };
+
+  const completedRuns = await waitForPagedLambda<TestRun>({
+    lambdaFunc,
+    progressFunc,
+    args,
+    eventKey,
+    usePage: false,
+    idKey: 'projectId',
+    ids: projectIds,
+  });
 
   logger('Successfully fetched all completed test runs');
 

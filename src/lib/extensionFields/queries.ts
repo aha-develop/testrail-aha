@@ -78,32 +78,26 @@ export const indexKeyForKindAndParent: (
 const queryExtensionFields: (
   names: string[]
 ) => Promise<Aha.ExtensionField[]> = async (names: string[]) => {
-  const promises = [];
+  const results: Aha.ExtensionField[] = [];
 
   for (let i = 0; i < names.length; i += GQL_BATCH_SIZE) {
     const chunk = names.slice(i, i + GQL_BATCH_SIZE);
 
-    const promise: (names: string[]) => Promise<Aha.ExtensionField[]> = async (
-      names: string[]
-    ) => {
-      const result = await aha.models.Account.select('id')
-        .merge({
-          extensionFields: aha.models.ExtensionField.select(
-            'name',
-            'value'
-          ).where({
-            name: names,
-          }),
-        })
-        .find(aha.account.id);
+    const result = await aha.models.Account.select('id')
+      .merge({
+        extensionFields: aha.models.ExtensionField.select(
+          'name',
+          'value'
+        ).where({
+          name: chunk,
+        }),
+      })
+      .find(aha.account.id);
 
-      return result.extensionFields;
-    };
-
-    promises.push(promise(chunk));
+    results.push(...result.extensionFields);
   }
 
-  return (await Promise.all(promises)).flat();
+  return results;
 };
 
 export const getAccountExtensionFieldMap: <T>(
@@ -161,20 +155,6 @@ export async function getSuites(
   return await getAccountExtensionFields<Suite>(names);
 }
 
-export async function getSuiteIdsForProject(
-  project: Project
-): Promise<string[]> {
-  if (project.suite_mode === 1) return [];
-
-  const key = indexKeyForKindAndParent('Suite', project.id);
-  const suiteIds = await aha.account.getExtensionField<string[]>(
-    IDENTIFIER,
-    key
-  );
-
-  return suiteIds ?? [];
-}
-
 export async function getTestCases(
   caseIds?: (string | undefined)[]
 ): Promise<TestCase[]> {
@@ -185,6 +165,34 @@ export async function getTestCases(
   const names = filteredIds.map(id => fieldName('TestCase', id));
 
   return await getAccountExtensionFields<TestCase>(names);
+}
+
+export async function getProjectTestCases(
+  projectIds: string[] | undefined
+): Promise<{
+  [projectId: string]: TestCase[];
+}> {
+  if (!projectIds || projectIds.length === 0) return {};
+
+  const mapping: { [projectId: string]: TestCase[] } = {};
+
+  const keys = projectIds.map(projectId =>
+    indexKeyForKindAndParent('TestCase', projectId)
+  );
+
+  const caseIds = (await getAccountExtensionFields<string[]>(keys)).flat();
+
+  const cases = await getTestCases(caseIds);
+
+  for (const testCase of cases) {
+    if (!mapping[testCase.projectId]) {
+      mapping[testCase.projectId] = [];
+    }
+
+    mapping[testCase.projectId].push(testCase);
+  }
+
+  return mapping;
 }
 
 export async function getLinkedComments(
@@ -220,7 +228,7 @@ export async function getTestRuns(
   return await getAccountExtensionFields<TestRun>(names);
 }
 
-export async function getRecentRunIds(lastSynced?: number): Promise<string[]> {
+export async function getAllRunIds(): Promise<string[]> {
   const projectIds = await aha.account.getExtensionField<string[]>(
     IDENTIFIER,
     'projectIds'
@@ -228,20 +236,12 @@ export async function getRecentRunIds(lastSynced?: number): Promise<string[]> {
 
   if (!projectIds || projectIds.length === 0) return [];
 
-  const runIdPromises: Promise<string[] | undefined>[] = [];
+  const keys = projectIds.map(projectId =>
+    indexKeyForKindAndParent('TestRun', projectId)
+  );
 
-  for (const projectId of projectIds) {
-    const key = indexKeyForKindAndParent('TestRun', projectId);
-    runIdPromises.push(
-      aha.account.getExtensionField<string[]>(IDENTIFIER, key)
-    );
-  }
-
-  const runIds = (await Promise.all(runIdPromises)).flat();
-
-  let runs = await getTestRuns(runIds);
-
-  if (lastSynced) runs = runs.filter(run => run.lastSynced > lastSynced);
+  const runIds = (await getAccountExtensionFields<string[]>(keys)).flat();
+  const runs = await getTestRuns(runIds);
 
   return runs.map(run => run.id);
 }

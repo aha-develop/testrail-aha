@@ -107,32 +107,44 @@
           "title": "TestRail Domain",
           "type": "string",
           "description": "The domain of your TestRail instance",
-          "scope": ["account"]
+          "scope": [
+            "account"
+          ]
         },
         "syncDelay": {
           "title": "TestRail API Automatic Sync Delay",
           "type": "number",
           "description": "How long (in seconds) before records will be automatically re-synced. If negative, will never auto-sync.",
-          "scope": ["account"],
-          "default": 300
+          "scope": [
+            "account"
+          ],
+          "default": 900
         },
         "username": {
           "title": "TestRail API Username",
           "type": "string",
           "description": "The username for your TestRail API authentication",
-          "scope": ["account"]
+          "scope": [
+            "account"
+          ]
         },
         "token": {
           "title": "TestRail API Token",
           "type": "secret",
           "description": "The token for your TestRail API authentication",
-          "scope": ["account"]
+          "scope": [
+            "account"
+          ]
         }
       }
     }
   },
   "dependencies": {
-    "moment": "^2.29.4",
-    "base64-js": "^1.5.1"
+    "base64-js": "^1.5.1",
+    "moment": "^2.29.4"
+  },
+  "devDependencies": {
+    "@types/prop-types": "^15.7.14",
+    "@types/react": "^16.8.0"
   }
 }

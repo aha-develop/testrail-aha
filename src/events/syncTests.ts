@@ -34,8 +34,6 @@ const syncTests: (props: SyncTestParams) => void = async ({
 
     if (!json) return; // Error already logged
 
-    const now = Date.now();
-
     const tests = json.tests.map(test => ({
       id: test.id,
       kind: 'Test',
@@ -43,7 +41,6 @@ const syncTests: (props: SyncTestParams) => void = async ({
       runId: test.run_id,
       statusId: test.status_id,
       title: test.title,
-      lastSynced: now,
     })) as Test[];
 
     const hasMore = json['_links']?.next !== null;

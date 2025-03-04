@@ -1,5 +1,5 @@
 import { IDENTIFIER, TestResult } from '../../extension';
-import { BaseSyncProps, waitForPagedLambda } from './interface';
+import { BaseSyncProps, waitForIndexedLambda } from './interface';
 import { linkResultsToTests } from '../extensionFields/updates';
 
 type SyncProps = BaseSyncProps & {
@@ -14,41 +14,38 @@ const syncResults: (props: SyncProps) => Promise<TestResult[]> = async ({
   logger,
 }) => {
   if (!runIds?.length) {
-    throw new Error('No synced test runs found, aborting test result sync.');
+    logger('No synced test runs found, aborting test result sync.');
+    return [];
   }
-
-  const testResults: TestResult[] = [];
 
   logger('Beginning load of test results from TestRail');
 
   const now = Date.now();
 
-  for (const runId of runIds) {
-    const eventKey = `wizardResults_${runId}-${now}`;
-    const args = { domain, runId };
+  let eventKey = `syncRuns-${Date.now()}`;
 
-    if (lastResultSync)
-      args['createdAfter'] = Math.floor(lastResultSync / 1000);
+  const args = { domain };
 
-    const lambdaFunc = async args => {
-      await aha.triggerServer(`${IDENTIFIER}.syncResults`, args);
-    };
+  if (lastResultSync) args['createdAfter'] = Math.floor(lastResultSync / 1000);
 
-    const progressFunc = async (firstPage, lastPage) => {
-      logger(
-        `Fetching test results for run ${runId}, pages ${firstPage} to ${lastPage}...`
-      );
-    };
+  const lambdaFunc = async args => {
+    await aha.triggerServer(`${IDENTIFIER}.syncResults`, args);
+  };
 
-    const results = await waitForPagedLambda<TestResult>({
-      lambdaFunc,
-      progressFunc,
-      args,
-      eventKey,
-    });
+  const progressFunc = async (firstPage, lastPage) => {
+    logger(`Fetching test results, pages ${firstPage} to ${lastPage}...`);
+  };
 
-    testResults.push(...results);
-  }
+  const argFunc = (index: number) => ({ runId: runIds[index] });
+
+  const testResults = await waitForIndexedLambda<TestResult>({
+    lambdaFunc,
+    progressFunc,
+    args,
+    eventKey,
+    argFunc,
+    numIds: runIds.length,
+  });
 
   logger('Successfully fetched all test results');
 

@@ -10,9 +10,10 @@ import { unlinkTestCase } from '../lib/extensionFields/updates';
 import { timeAgo } from '../lib/util';
 import RecordLink from '../components/RecordLink';
 import { Styles } from '../components/Styles';
-import LinkTestCase from '../components/LinkTestCase';
+import LinkTestCase from '../components/linking/LinkTestCase';
 import { ExtensionRecord, isExtensionRecord } from '../lib/extensionRecord';
-import SmartSpinner from '../components/SmartSpinner';
+import { BulkSyncState, SyncState } from '../lib/sync/bulkSync';
+import waitForBulkSync from '../lib/sync/waitForBulkSync';
 
 type RowProps = {
   testCase: TestCase;
@@ -69,15 +70,6 @@ function createTestCase() {
   alert('Creating a test case is not yet implemented');
 }
 
-function syncWithTestRail() {
-  alert('Syncing with TestRail is not yet implemented');
-}
-
-const openLinkModal = (setModalOpen, setSpinner) => {
-  setModalOpen(true);
-  setSpinner(false);
-};
-
 const TestRow: React.FC<RowProps> = ({
   testCase,
   test,
@@ -116,42 +108,22 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   const caseIds = fields['caseIds'] as string[] | undefined;
   const testIds = fields['testIds'] as string[] | undefined;
 
-  const [retryAt, setRetryAt] = useState<number>(null);
-  const [lastSynced, setLastSynced] = useState<number>(null);
-
+  const [syncData, setSyncData] = useState<BulkSyncState>(null);
   const [tabData, setTabData] = useState<FeatureTabData>(null);
 
-  const [modalOpen, setModalOpen] = useState(false);
-  const [spinner, setSpinner] = useState<boolean>(false);
-  const [eventKey, setEventKey] = useState<string>(null);
+  const [linkCaseModalOpen, setLinkCaseModalOpen] = useState(false);
+
+  const onClose = _event => setLinkCaseModalOpen(false);
 
   const domain = settings.get('domain') as string | undefined;
   const syncDelay = settings.get('syncDelay') as number | undefined;
 
   useEffect(() => {
     async function initData() {
-      const actualRetryAt = (await aha.account.getExtensionField(
-        IDENTIFIER,
-        'retryAt'
-      )) as number | undefined;
-
-      if (actualRetryAt) setRetryAt(actualRetryAt);
-
       const tabData = await getFeatureTabData(caseIds, testIds);
 
-      // Refresh lastSynced, as the oldest testcases might have been synced
-      let earliestSynced = null;
-      for (const testCase of tabData.testCases) {
-        if (
-          testCase.lastSynced &&
-          (!earliestSynced || testCase.lastSynced < earliestSynced)
-        ) {
-          earliestSynced = testCase.lastSynced;
-        }
-      }
-
       setTabData(tabData);
-      setLastSynced(earliestSynced);
+      waitForBulkSync({ domain, syncDelay, setState: setSyncData });
     }
 
     initData();
@@ -174,7 +146,7 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
 
       return (
         <TestRow
-          key={`case-${testCase.id}-${testCase.lastSynced}`}
+          key={`case-${testCase.id}`}
           testCase={testCase}
           test={test}
           comment={comment}
@@ -189,51 +161,58 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   return (
     <>
       <Styles />
-      {retryAt && retryAt > Date.now() && (
+      {syncData && syncData.state === SyncState.Timeout && (
         <div className='mb-5'>
           <aha-alert type='danger' dismissable>
             API rate limit reached. Please try again in a few minutes
           </aha-alert>
         </div>
       )}
-      {spinner && (
-        <div className='mb-5'>
-          <SmartSpinner record={record} eventKey={eventKey} />
-        </div>
-      )}
 
       <div className='tab-header'>
         <div className='tab-header-left'>
           <h4 className='tab-title'>Tests</h4>
-          <aha-button
-            onClick={() => openLinkModal(setModalOpen, setSpinner)}
-            kind='link'
-          >
+          <aha-button onClick={() => setLinkCaseModalOpen(true)} kind='link'>
             <aha-icon icon='fa-regular fa-link' />
-            Link a test
+            Link a test case
           </aha-button>
-          {modalOpen && (
+          {linkCaseModalOpen && (
             <LinkTestCase
               domain={domain}
               record={record}
-              syncDelay={syncDelay}
-              setOpen={setModalOpen}
-              setSpinner={setSpinner}
-              setEventKey={setEventKey}
+              syncData={syncData}
+              onClose={onClose}
             />
           )}
           <aha-button onClick={createTestCase} kind='link'>
             <aha-icon icon='fa-regular fa-circle-plus' aria-hidden='true' />
-            Create a test
+            Create a test case
           </aha-button>
         </div>
         <div className='tab-header-right'>
-          <span className='text-small text-light'>
-            Last updated: {timeAgo(lastSynced)}
-          </span>
-          <aha-button onClick={syncWithTestRail} size='mini' kind='link'>
-            Refresh
-          </aha-button>
+          {syncData && (
+            <>
+              <span className='text-small text-light'>
+                Last updated: {timeAgo(syncData.lastSync)}
+              </span>
+              <aha-button
+                onClick={() =>
+                  waitForBulkSync({
+                    domain,
+                    syncDelay: 0,
+                    setState: setSyncData,
+                  })
+                }
+                disabled={syncData.state === SyncState.Running ? true : null}
+                size='mini'
+                kind='link'
+              >
+                {syncData.state === SyncState.Running
+                  ? 'Refreshing'
+                  : 'Refresh'}
+              </aha-button>
+            </>
+          )}
         </div>
       </div>
       <div>{caseRows}</div>

@@ -97,15 +97,12 @@ const syncTestRuns: (props: SyncTestRunsProps) => void = async ({
 
     if (!json) return; // Error already logged
 
-    const now = Date.now();
-
     const testRuns = json.runs.map(testRun => ({
       id: testRun.id,
       kind: 'TestRun',
       projectId: testRun.project_id,
       suiteId: testRun.suite_id,
       name: testRun.name,
-      lastSynced: now,
     })) as TestRun[];
 
     const hasMore = json['_links']?.next !== null;

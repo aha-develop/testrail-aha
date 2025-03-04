@@ -35,18 +35,15 @@ export const saveRecords: <T extends TestRailRecord>(
 ) => Promise<void> = async records => {
   if (records.length === 0) return;
 
-  // Fire off all requests at once to minimize the chance we get dropped part way
-  const promises = records.map(record =>
-    aha.account.setExtensionField(
+  for (const record of records) {
+    await aha.account.setExtensionField(
       IDENTIFIER,
       fieldName(record.kind, record.id),
       record
-    )
-  );
+    );
+  }
 
-  promises.push(updateRecordIndexes(records));
-
-  await Promise.all(promises);
+  await updateRecordIndexes(records);
 };
 
 const updateRecordIndexes: <T extends TestRailRecord>(
@@ -64,13 +61,9 @@ const updateRecordIndexes: <T extends TestRailRecord>(
     keyMap[indexKey].push(record);
   }
 
-  const promises = [];
-
   for (const key in keyMap) {
-    promises.push(updateIndex(key, keyMap[key]));
+    await updateIndex(key, keyMap[key]);
   }
-
-  await Promise.all(promises);
 };
 
 const updateIndex: <T extends TestRailRecord>(
@@ -107,8 +100,6 @@ export const linkResultsToTests = async (results: TestResult[]) => {
     comment: string;
   }>(Object.keys(keyMap));
 
-  const promises = [];
-
   for (const key in keyMap) {
     let best = commentLinks[key];
     let unchanged = true;
@@ -127,8 +118,6 @@ export const linkResultsToTests = async (results: TestResult[]) => {
 
     if (unchanged) continue;
 
-    promises.push(aha.account.setExtensionField(IDENTIFIER, key, best));
+    await aha.account.setExtensionField(IDENTIFIER, key, best);
   }
-
-  await Promise.all(promises);
 };
