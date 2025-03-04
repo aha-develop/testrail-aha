@@ -6,28 +6,36 @@ import {
   getAccountExtensionFieldMap,
 } from './queries';
 
-export async function linkTestCase(record: ExtensionRecord, caseId: string) {
-  let caseIds = await record.getExtensionField<string[]>(IDENTIFIER, 'caseIds');
+export const linkRecord: (
+  record: ExtensionRecord,
+  id: number,
+  key: string
+) => Promise<void> = async (record, id, key) => {
+  let existingIds = await record.getExtensionField<number[]>(IDENTIFIER, key);
 
-  if (!caseIds) caseIds = [];
+  if (!existingIds) existingIds = [];
 
-  if (caseIds.includes(caseId)) return;
+  if (existingIds.includes(id)) return;
 
-  caseIds.push(caseId);
+  existingIds.push(id);
 
-  await record.setExtensionField(IDENTIFIER, 'caseIds', caseIds);
-}
+  await record.setExtensionField(IDENTIFIER, key, existingIds);
+};
 
-export async function unlinkTestCase(record: ExtensionRecord, caseId: string) {
-  let caseIds = (await record.getExtensionField(IDENTIFIER, 'caseIds')) as
-    | string[]
+export async function unlinkRecord(
+  record: ExtensionRecord,
+  id: number,
+  key: string
+) {
+  let ids = (await record.getExtensionField(IDENTIFIER, key)) as
+    | number[]
     | undefined;
 
-  const newCaseIds = caseIds.filter(id => id !== caseId);
+  const newIds = ids.filter(existingId => id !== existingId);
 
-  if (newCaseIds.length === caseIds.length) return;
+  if (newIds.length === ids.length) return;
 
-  await record.setExtensionField(IDENTIFIER, 'caseIds', newCaseIds);
+  await record.setExtensionField(IDENTIFIER, key, newIds);
 }
 
 export const saveRecords: <T extends TestRailRecord>(
@@ -71,7 +79,7 @@ const updateIndex: <T extends TestRailRecord>(
   records: T[]
 ) => Promise<void> = async (key, records) => {
   const allIds =
-    (await aha.account.getExtensionField<string[]>(IDENTIFIER, key)) ?? [];
+    (await aha.account.getExtensionField<number[]>(IDENTIFIER, key)) ?? [];
 
   allIds.push(...records.map(record => record.id));
 

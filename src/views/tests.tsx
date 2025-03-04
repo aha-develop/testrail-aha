@@ -1,16 +1,14 @@
 import React, { useEffect, useState } from 'react';
-import { IDENTIFIER, TestCase, Test, Status } from '../extension';
-import {
-  getTestCases,
-  getTests,
-  getLinkedComments,
-  getStatuses,
-} from '../lib/extensionFields/queries';
-import { unlinkTestCase } from '../lib/extensionFields/updates';
-import { timeAgo } from '../lib/util';
+import { TestCase, Test, Status } from '../extension';
+import { getRecords, getLinkedComments } from '../lib/extensionFields/queries';
+import { unlinkRecord } from '../lib/extensionFields/updates';
+import { timeAgo, formatTime, numberToColor } from '../lib/util';
 import RecordLink from '../components/RecordLink';
 import { Styles } from '../components/Styles';
-import LinkTestCase from '../components/linking/LinkTestCase';
+import LinkTestCase from '../components/linkTestCase/LinkTestCase';
+import LinkTest from '../components/linkTest/LinkTest';
+import CreateTestCase from '../components/CreateTestCase';
+import LinkTestToTestCase from '../components/LinkTestToTestCase';
 import { ExtensionRecord, isExtensionRecord } from '../lib/extensionRecord';
 import { BulkSyncState, SyncState } from '../lib/sync/bulkSync';
 import waitForBulkSync from '../lib/sync/waitForBulkSync';
@@ -18,10 +16,11 @@ import waitForBulkSync from '../lib/sync/waitForBulkSync';
 type RowProps = {
   testCase: TestCase;
   test?: Test;
-  comment?: string;
+  comment?: { timestamp: number; comment: string };
   status?: Status;
   domain: string;
   record: ExtensionRecord;
+  syncData: BulkSyncState;
 };
 
 type TabProps = {
@@ -32,17 +31,17 @@ type TabProps = {
 
 type FeatureTabData = {
   testCases: TestCase[];
-  tests: { [caseId: string]: Test };
-  comments: { [testId: string]: string };
+  tests: { [caseId: number]: Test };
+  comments: { [testId: number]: { timestamp: number; comment: string } };
   statuses: { [key: string]: Status };
 };
 
 export async function getFeatureTabData(
-  caseIds: string[],
-  testIds: string[]
+  caseIds: number[],
+  testIds: number[]
 ): Promise<FeatureTabData> {
-  const testCases = await getTestCases(caseIds);
-  const tests = await getTests(testIds);
+  const testCases = await getRecords<TestCase>(caseIds, 'TestCase');
+  const tests = await getRecords<Test>(testIds, 'Test');
 
   const testMap = tests.reduce(
     (acc, test) => ({ ...acc, [test.caseId]: test }),
@@ -52,7 +51,7 @@ export async function getFeatureTabData(
   const commentMap = await getLinkedComments(tests);
 
   const statusIds = tests.map(test => test.statusId);
-  const statuses = await getStatuses(statusIds);
+  const statuses = await getRecords<Status>(statusIds, 'Status');
   const statusMap = statuses.reduce((acc, status) => {
     acc[status.id] = status;
     return acc;
@@ -66,10 +65,6 @@ export async function getFeatureTabData(
   };
 }
 
-function createTestCase() {
-  alert('Creating a test case is not yet implemented');
-}
-
 const TestRow: React.FC<RowProps> = ({
   testCase,
   test,
@@ -77,43 +72,87 @@ const TestRow: React.FC<RowProps> = ({
   status,
   domain,
   record,
+  syncData,
 }) => {
+  const [linkTestModalOpen, setLinkTestModalOpen] = useState(false);
+
+  const unlink = () => {
+    unlinkRecord(record, testCase.id, 'caseIds');
+    if (test) unlinkRecord(record, test.id, 'testIds');
+  };
+
   return (
     <div className='test-row'>
       <div className='test-row-column'>
-        <RecordLink record={testCase} domain={domain} />
+        <div className='test-ref'>
+          <RecordLink record={testCase} domain={domain} />
+        </div>
         <div>
           <div className='test-title'>{testCase.title}</div>
-          {comment && <div className='test-comment'>{comment}</div>}
+          {comment && <div className='text-gray'>{comment.comment}</div>}
         </div>
       </div>
-      {test && (
-        <div className='test-row-column'>
-          <RecordLink record={test} domain={domain} />
-          {status && <aha-pill color={status.color}>{status.label}</aha-pill>}
-          <aha-button
-            size='mini'
-            kind='icon'
-            onClick={() => unlinkTestCase(record, testCase.id)}
-          >
-            <aha-icon icon='fa-regular fa-trash-can' />
-          </aha-button>
-        </div>
-      )}
+      <div className='test-row-column'>
+        {test ? (
+          <>
+            {comment && (
+              <div className='text-light'>
+                {formatTime(comment.timestamp * 1000)}
+              </div>
+            )}
+            <RecordLink record={test} domain={domain} />
+            {status && (
+              <aha-pill color={numberToColor(status.colorMedium)}>
+                {status.label}
+              </aha-pill>
+            )}
+          </>
+        ) : (
+          <>
+            <aha-button
+              size='small'
+              kind='link'
+              onClick={() => setLinkTestModalOpen(true)}
+            >
+              <aha-icon icon='fa-regular fa-link' />
+              Link to test
+            </aha-button>
+            {linkTestModalOpen && (
+              <LinkTestToTestCase
+                record={record}
+                testCase={testCase}
+                syncData={syncData}
+                onClose={() => setLinkTestModalOpen(false)}
+              />
+            )}
+          </>
+        )}
+        <aha-button size='mini' kind='icon' onClick={unlink}>
+          <aha-icon icon='fa-regular fa-trash-can' />
+        </aha-button>
+      </div>
     </div>
   );
 };
 
 const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
-  const caseIds = fields['caseIds'] as string[] | undefined;
-  const testIds = fields['testIds'] as string[] | undefined;
+  const caseIds = fields['caseIds'] as number[] | undefined;
+  const testIds = fields['testIds'] as number[] | undefined;
 
+  const [loading, setLoading] = useState(true);
   const [syncData, setSyncData] = useState<BulkSyncState>(null);
   const [tabData, setTabData] = useState<FeatureTabData>(null);
 
   const [linkCaseModalOpen, setLinkCaseModalOpen] = useState(false);
+  const [linkTestModalOpen, setLinkTestModalOpen] = useState(false);
+  const [createCaseModalOpen, setCreateCaseModalOpen] = useState(false);
 
-  const onClose = _event => setLinkCaseModalOpen(false);
+  // Used to re-trigger the useEffect and reload the data.
+  const [reload, setReload] = useState(0);
+
+  const reloadTabData = () => setReload(reload + 1);
+
+  const onClose = (setter: (value: boolean) => void) => () => setter(false);
 
   const domain = settings.get('domain') as string | undefined;
   const syncDelay = settings.get('syncDelay') as number | undefined;
@@ -123,11 +162,18 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
       const tabData = await getFeatureTabData(caseIds, testIds);
 
       setTabData(tabData);
-      waitForBulkSync({ domain, syncDelay, setState: setSyncData });
+      waitForBulkSync({
+        domain,
+        syncDelay,
+        setState: setSyncData,
+        reload: reloadTabData,
+      });
+
+      setLoading(false);
     }
 
     initData();
-  }, [caseIds]);
+  }, [caseIds, reload]);
 
   let caseRows = null;
 
@@ -153,6 +199,7 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
           status={status}
           record={record}
           domain={domain}
+          syncData={syncData}
         />
       );
     });
@@ -171,7 +218,7 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
 
       <div className='tab-header'>
         <div className='tab-header-left'>
-          <h4 className='tab-title'>Tests</h4>
+          <h4 className='h-400'>Tests</h4>
           <aha-button onClick={() => setLinkCaseModalOpen(true)} kind='link'>
             <aha-icon icon='fa-regular fa-link' />
             Link a test case
@@ -181,14 +228,33 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
               domain={domain}
               record={record}
               syncData={syncData}
-              onClose={onClose}
+              onClose={onClose(setLinkCaseModalOpen)}
             />
           )}
-          <aha-button onClick={createTestCase} kind='link'>
-            <aha-icon icon='fa-regular fa-circle-plus' aria-hidden='true' />
+          <aha-button onClick={() => setLinkTestModalOpen(true)} kind='link'>
+            <aha-icon icon='fa-regular fa-link' />
+            Link a test
+          </aha-button>
+          {linkTestModalOpen && (
+            <LinkTest
+              record={record}
+              syncData={syncData}
+              onClose={onClose(setLinkTestModalOpen)}
+            />
+          )}
+          <aha-button onClick={() => setCreateCaseModalOpen(true)} kind='link'>
+            <aha-icon icon='fa-regular fa-circle-plus' />
             Create a test case
           </aha-button>
         </div>
+        {createCaseModalOpen && (
+          <CreateTestCase
+            domain={domain}
+            record={record}
+            syncData={syncData}
+            onClose={onClose(setCreateCaseModalOpen)}
+          />
+        )}
         <div className='tab-header-right'>
           {syncData && (
             <>
@@ -201,6 +267,7 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
                     domain,
                     syncDelay: 0,
                     setState: setSyncData,
+                    reload: reloadTabData,
                   })
                 }
                 disabled={syncData.state === SyncState.Running ? true : null}
@@ -215,7 +282,7 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
           )}
         </div>
       </div>
-      <div>{caseRows}</div>
+      <div>{loading ? <aha-loading-row rows={5} columns={2} /> : caseRows}</div>
     </>
   );
 };

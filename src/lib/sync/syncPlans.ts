@@ -11,15 +11,15 @@ const NUM_COMPLETED_PLANS = 250;
 
 type SyncPlanProps = BaseSyncProps & {
   lastPlanSync?: number;
-  projectIds: string[];
+  projectIds: number[];
 };
 
 type SyncCompletedProps = BaseSyncProps & {
-  projectIds: string[];
+  projectIds: number[];
 };
 
 type SyncRunProps = BaseSyncProps & {
-  planIds: string[];
+  planIds: number[];
 };
 
 export const syncOpenPlans: (
@@ -54,7 +54,7 @@ export const syncOpenPlans: (
 
   const argFunc = (index: number) => ({ projectId: projectIds[index] });
 
-  const openPlans = await waitForIndexedLambda<string>({
+  const openPlans = await waitForIndexedLambda<number>({
     lambdaFunc,
     progressFunc,
     args,
@@ -98,7 +98,7 @@ export const syncCompletedPlans: (
     );
   };
 
-  const planIds = await waitForPagedLambda<string>({
+  const planIds = await waitForPagedLambda<number>({
     lambdaFunc,
     progressFunc,
     args,

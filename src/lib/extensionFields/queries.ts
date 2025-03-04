@@ -1,11 +1,9 @@
 import {
   IDENTIFIER,
-  Project,
-  Suite,
+  Section,
   TestCase,
   TestRun,
   Test,
-  Status,
   TestRailRecord,
   TestResult,
 } from '../../extension';
@@ -13,7 +11,7 @@ import {
 // Guard against overloading the GQL by fetching thousands of records at once.
 const GQL_BATCH_SIZE = 500;
 
-export const fieldName: (kind: TestRailRecord['kind'], id: string) => string = (
+export const fieldName: (kind: TestRailRecord['kind'], id: number) => string = (
   kind,
   id
 ) => {
@@ -24,6 +22,8 @@ export const fieldName: (kind: TestRailRecord['kind'], id: string) => string = (
       return `project_${id}`;
     case 'Suite':
       return `suite_${id}`;
+    case 'Section':
+      return `section_${id}`;
     case 'TestCase':
       return `case_${id}`;
     case 'TestRun':
@@ -43,6 +43,7 @@ export const indexKeyForRecord: (
     case 'Project':
       return indexKeyForKindAndParent(record.kind);
     case 'Suite':
+    case 'Section':
     case 'TestCase':
     case 'TestRun':
       return indexKeyForKindAndParent(record.kind, record.projectId);
@@ -55,7 +56,7 @@ export const indexKeyForRecord: (
 
 export const indexKeyForKindAndParent: (
   kind: TestRailRecord['kind'] | 'TestResult',
-  parentId?: string
+  parentId?: number
 ) => string = (kind, parentId) => {
   switch (kind) {
     case 'Status':
@@ -64,6 +65,8 @@ export const indexKeyForKindAndParent: (
       return `projectIds`;
     case 'Suite':
       return `project_${parentId}_suiteIds`;
+    case 'Section':
+      return `project_${parentId}_sectionIds`;
     case 'TestCase':
       return `project_${parentId}_caseIds`;
     case 'TestRun':
@@ -119,70 +122,65 @@ const getAccountExtensionFields: <T>(
   return extensionFields.map(field => field.value).filter(value => value);
 };
 
-export async function getStatuses(
-  statusIds?: (string | undefined)[]
-): Promise<Status[]> {
-  const filteredIds = statusIds?.filter(id => id);
+export const getRecords: <T extends TestRailRecord>(
+  ids: (number | undefined)[],
+  kind: TestRailRecord['kind']
+) => Promise<T[]> = async <T extends TestRailRecord>(ids, kind) => {
+  const filteredIds = ids?.filter(id => id);
 
   if (!filteredIds || filteredIds.length === 0) return [];
 
-  const names = filteredIds.map(id => fieldName('Status', id));
+  const names = filteredIds.map(id => fieldName(kind, id));
 
-  return await getAccountExtensionFields<Status>(names);
-}
+  const result = await getAccountExtensionFields<T>(names);
 
-export async function getProjects(
-  projectIds?: (string | undefined)[]
-): Promise<Project[]> {
-  const filteredIds = projectIds?.filter(id => id);
+  return result.sort((a, b) => b.id - a.id); // Sort by ID descending
+};
 
-  if (!filteredIds || filteredIds.length === 0) return [];
-
-  const names = filteredIds.map(id => fieldName('Project', id));
-
-  return await getAccountExtensionFields<Project>(names);
-}
-
-export async function getSuites(
-  suiteIds?: (string | undefined)[]
-): Promise<Suite[]> {
-  const filteredIds = suiteIds?.filter(id => id);
-
-  if (!filteredIds || filteredIds.length === 0) return [];
-
-  const names = filteredIds.map(id => fieldName('Suite', id));
-
-  return await getAccountExtensionFields<Suite>(names);
-}
-
-export async function getTestCases(
-  caseIds?: (string | undefined)[]
-): Promise<TestCase[]> {
-  const filteredIds = caseIds?.filter(id => id);
-
-  if (!filteredIds || filteredIds.length === 0) return [];
-
-  const names = filteredIds.map(id => fieldName('TestCase', id));
-
-  return await getAccountExtensionFields<TestCase>(names);
-}
-
-export async function getProjectTestCases(
-  projectIds: string[] | undefined
+export async function getProjectSections(
+  projectIds: number[] | undefined
 ): Promise<{
-  [projectId: string]: TestCase[];
+  [projectId: number]: Section[];
 }> {
   if (!projectIds || projectIds.length === 0) return {};
 
-  const mapping: { [projectId: string]: TestCase[] } = {};
+  const mapping: { [projectId: number]: Section[] } = {};
+
+  const keys = projectIds.map(projectId =>
+    indexKeyForKindAndParent('Section', projectId)
+  );
+
+  const sectionIds = (await getAccountExtensionFields<number[]>(keys)).flat();
+
+  const sections = await getRecords<Section>(sectionIds, 'Section');
+
+  for (const section of sections) {
+    if (!mapping[section.projectId]) {
+      mapping[section.projectId] = [];
+    }
+
+    mapping[section.projectId].push(section);
+  }
+
+  return mapping;
+}
+
+export async function getProjectTestCases(
+  projectIds: number[] | undefined
+): Promise<{
+  [projectId: number]: TestCase[];
+}> {
+  if (!projectIds || projectIds.length === 0) return {};
+
+  const mapping: { [projectId: number]: TestCase[] } = {};
 
   const keys = projectIds.map(projectId =>
     indexKeyForKindAndParent('TestCase', projectId)
   );
 
-  const caseIds = (await getAccountExtensionFields<string[]>(keys)).flat();
+  const caseIds = (await getAccountExtensionFields<number[]>(keys)).flat();
 
-  const cases = await getTestCases(caseIds);
+  const cases = await getRecords<TestCase>(caseIds, 'TestCase');
 
   for (const testCase of cases) {
     if (!mapping[testCase.projectId]) {
@@ -197,7 +195,7 @@ export async function getProjectTestCases(
 
 export async function getLinkedComments(
   tests: Test[]
-): Promise<{ [testId: string]: string }> {
+): Promise<{ [testId: number]: { comment: string; timestamp: number } }> {
   const commentKey = test => `${fieldName('Test', test.id)}_comment`;
 
   const keys = tests.map(test => commentKey(test));
@@ -210,26 +208,46 @@ export async function getLinkedComments(
   return tests.reduce(
     (result, test, i) => ({
       ...result,
-      [test.id]: commentLinks[commentKey(test)]?.comment,
+      [test.id]: commentLinks[commentKey(test)],
     }),
     {}
   );
 }
 
-export async function getTestRuns(
-  runIds?: (string | undefined)[]
-): Promise<TestRun[]> {
-  const filteredIds = runIds?.filter(id => id);
+export const getRunMapForTestCase: (
+  testCase: TestCase
+) => Promise<[Test, string, number][]> = async testCase => {
+  const runIds = await aha.account.getExtensionField<number[]>(
+    IDENTIFIER,
+    indexKeyForKindAndParent('TestRun', testCase.projectId)
+  );
 
-  if (!filteredIds || filteredIds.length === 0) return [];
+  if (!runIds || runIds.length === 0) return [];
 
-  const names = filteredIds.map(id => fieldName('TestRun', id));
+  const runs = await getRecords<TestRun>(runIds, 'TestRun');
+  const runMap = runs.reduce((acc, run) => ({ ...acc, [run.id]: run }), {});
 
-  return await getAccountExtensionFields<TestRun>(names);
-}
+  const testKeys = runs.map(run => indexKeyForKindAndParent('Test', run.id));
+  const testIds = (await getAccountExtensionFields<number[]>(testKeys)).flat();
+  const tests = await getRecords<Test>(testIds, 'Test');
 
-export async function getAllRunIds(): Promise<string[]> {
-  const projectIds = await aha.account.getExtensionField<string[]>(
+  const result: [Test, string, number][] = [];
+
+  for (const test of tests) {
+    if (test.caseId === testCase.id) {
+      const run = runMap[test.runId];
+
+      if (!run) continue;
+
+      result.push([test, run.name, run.createdOn]);
+    }
+  }
+
+  return result;
+};
+
+export async function getAllRunIds(): Promise<number[]> {
+  const projectIds = await aha.account.getExtensionField<number[]>(
     IDENTIFIER,
     'projectIds'
   );
@@ -240,20 +258,8 @@ export async function getAllRunIds(): Promise<string[]> {
     indexKeyForKindAndParent('TestRun', projectId)
   );
 
-  const runIds = (await getAccountExtensionFields<string[]>(keys)).flat();
-  const runs = await getTestRuns(runIds);
+  const runIds = (await getAccountExtensionFields<number[]>(keys)).flat();
+  const runs = await getRecords<TestRun>(runIds, 'TestRun');
 
   return runs.map(run => run.id);
-}
-
-export async function getTests(
-  testIds?: (string | undefined)[]
-): Promise<Test[]> {
-  const filteredIds = testIds?.filter(id => id);
-
-  if (!filteredIds || filteredIds.length === 0) return [];
-
-  const names = filteredIds.map(id => fieldName('Test', id));
-
-  return await getAccountExtensionFields<Test>(names);
 }

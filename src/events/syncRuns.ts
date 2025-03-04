@@ -1,5 +1,6 @@
 import { IDENTIFIER, TestRun } from '../extension';
 import { fetchTestRail, logResult, BaseParams } from '../lib/api';
+import { truncate } from '../lib/util';
 
 type TestRunProps = BaseParams & {
   projectId: string;
@@ -102,7 +103,8 @@ const syncTestRuns: (props: SyncTestRunsProps) => void = async ({
       kind: 'TestRun',
       projectId: testRun.project_id,
       suiteId: testRun.suite_id,
-      name: testRun.name,
+      name: truncate(testRun.name),
+      createdOn: testRun.created_on,
     })) as TestRun[];
 
     const hasMore = json['_links']?.next !== null;

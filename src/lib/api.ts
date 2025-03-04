@@ -30,6 +30,8 @@ export type BaseParams = {
 
 type FetchParams = BaseParams & {
   path: string;
+  method?: string;
+  body?: any;
 };
 
 export const RETRY_WAIT = 60;
@@ -89,6 +91,8 @@ export const fetchTestRail: (props: FetchParams) => Promise<any> = async ({
   path,
   eventKey,
   record,
+  method = 'GET',
+  body,
 }) => {
   const url = `https://${domain}.testrail.io/index.php?/api/v2/${path}`;
 
@@ -106,10 +110,14 @@ export const fetchTestRail: (props: FetchParams) => Promise<any> = async ({
 
   console.log(`Fetching from TestRail - URL: ${url}`);
 
-  const response = await fetch(url, {
-    method: 'GET',
+  const args = {
+    method,
     headers,
-  });
+  };
+
+  args['body'] = body ? JSON.stringify(body) : undefined;
+
+  const response = await fetch(url, args);
 
   if (!response.ok) {
     if (response.status === 429) {

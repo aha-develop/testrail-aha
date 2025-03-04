@@ -10,7 +10,7 @@ import { saveRecords } from '../extensionFields/updates';
 const NUM_COMPLETED_RUNS = 250;
 
 type SyncProps = BaseSyncProps & {
-  projectIds: string[];
+  projectIds: number[];
   lastRunSync?: number;
 };
 

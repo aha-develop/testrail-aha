@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { IDENTIFIER } from '../extension';
 import { ExtensionRecord } from '../lib/extensionRecord';
 import { sleep } from '../lib/util';
+import { LambdaResult } from '../lib/sync/interface';
 
 type Props = {
   record: ExtensionRecord;
@@ -46,7 +47,10 @@ const SmartSpinner: React.FC<Props> = ({
 
         await sleep(INTERVAL_TIME);
 
-        const result = await record.getExtensionField(IDENTIFIER, eventKey);
+        const result = await record.getExtensionField<LambdaResult>(
+          IDENTIFIER,
+          eventKey
+        );
 
         if (result?.message) {
           if (result.error) {

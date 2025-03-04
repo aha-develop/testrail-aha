@@ -3,7 +3,7 @@ import { BaseSyncProps, waitForPagedLambda } from './interface';
 import { saveRecords } from '../extensionFields/updates';
 
 type SyncProps = BaseSyncProps & {
-  projectIds: string[];
+  projectIds: number[];
 };
 
 const syncSuites: (props: SyncProps) => Promise<Suite[]> = async ({

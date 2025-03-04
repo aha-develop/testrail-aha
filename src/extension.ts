@@ -3,61 +3,73 @@ export const IDENTIFIER = 'aha-develop.testrail-aha';
 export type TestRailRecord =
   | Project
   | Suite
+  | Section
   | Status
   | TestCase
   | TestRun
   | Test;
 
 export type Project = {
-  id: string;
+  id: number;
   kind: 'Project';
   name: string;
-  suite_mode: number;
 };
 
 export type Suite = {
-  id: string;
+  id: number;
   kind: 'Suite';
   name: string;
-  projectId: string;
+  projectId: number;
+};
+
+export type Section = {
+  id: number;
+  kind: 'Section';
+  projectId: number;
+  parentId?: number;
+  suiteId: number;
+  name: string;
 };
 
 export type TestCase = {
-  id: string;
+  id: number;
   kind: 'TestCase';
-  projectId: string;
-  suiteId: string;
+  projectId: number;
+  suiteId: number;
   title: string;
+  createdOn: number;
 };
 
 export type TestRun = {
-  id: string;
+  id: number;
   kind: 'TestRun';
-  projectId: string;
-  suiteId: string;
+  projectId: number;
+  suiteId: number;
   name: string;
+  createdOn: number;
 };
 
 export type Test = {
-  id: string;
+  id: number;
   kind: 'Test';
-  caseId: string;
-  runId: string;
-  statusId: string;
-  title: string;
+  caseId: number;
+  runId: number;
+  statusId: number;
 };
 
 export type TestResult = {
-  id: string;
+  id: number;
   kind: 'TestResult';
-  testId: string;
+  testId: number;
   comment: string;
   createdOn: number;
 };
 
 export type Status = {
-  id: string;
+  id: number;
   kind: 'Status';
   label: string;
-  color: string;
+  colorBright: number;
+  colorMedium: number;
+  colorDark: number;
 };

@@ -1,5 +1,6 @@
 import { IDENTIFIER, TestResult } from '../extension';
 import { fetchTestRail, logResult, BaseParams } from '../lib/api';
+import { truncate } from '../lib/util';
 
 type SyncResultParams = BaseParams & {
   runId: string;
@@ -39,7 +40,7 @@ export const syncTestResults: (props: SyncResultParams) => void = async ({
       id: result.id,
       kind: 'TestResult',
       testId: result.test_id,
-      comment: result.comment,
+      comment: truncate(result.comment),
       createdOn: result.created_on,
     })) as TestResult[];
 

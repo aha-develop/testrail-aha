@@ -1,8 +1,9 @@
 import { IDENTIFIER, TestCase, Suite } from '../extension';
 import { isExtensionRecord } from '../lib/extensionRecord';
 import { BaseParams, fetchTestRail, logResult } from '../lib/api';
-import { linkTestCase, saveRecords } from '../lib/extensionFields/updates';
+import { linkRecord, saveRecords } from '../lib/extensionFields/updates';
 import { fieldName } from '../lib/extensionFields/queries';
+import { truncate } from '../lib/util';
 
 type SyncTestCaseProps = BaseParams & {
   caseId: string;
@@ -39,11 +40,12 @@ const syncTestCase: (
     }
 
     const testCase: TestCase = {
-      id: json.id as string,
+      id: json.id,
       kind: 'TestCase',
-      title: json.title as string,
+      title: truncate(json.title),
       projectId: suite.projectId,
-      suiteId: json.suite_id as string,
+      suiteId: json.suite_id,
+      createdOn: json.created_on,
     };
 
     console.log('Test case fetched, storing in Aha!');
@@ -77,7 +79,7 @@ aha.on(
 
     if (result) {
       console.log('Linking test case to record');
-      await linkTestCase(record, caseId);
+      await linkRecord(record, caseId, 'caseIds');
 
       await logResult({
         record,

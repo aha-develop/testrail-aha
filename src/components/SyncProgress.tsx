@@ -1,5 +1,5 @@
 import React from 'react';
-import { BulkSyncState, SyncState, SyncStage } from '../../lib/sync/bulkSync';
+import { BulkSyncState, SyncState, SyncStage } from '../lib/sync/bulkSync';
 
 const messageFromState = (state: BulkSyncState) => {
   if (!state) {
@@ -66,11 +66,12 @@ const SyncProgress: React.FC<{ syncData: BulkSyncState }> = ({ syncData }) => {
         </span>
       </div>
       <aha-progress-bar
-        class='sync-bar'
+        class='sync-bar' // className isn't valid here
         total={100}
         completed={syncData?.progress || 0}
         no-text
         height='10px'
+        units='%'
       />
     </div>
   );

@@ -17,7 +17,7 @@ const resync: (props: ResyncProps) => Promise<void> = async ({
     setMessage('Fetching projects for test runs...');
 
     const projectIds =
-      (await aha.account.getExtensionField<string[]>(
+      (await aha.account.getExtensionField<number[]>(
         IDENTIFIER,
         'projectIds'
       )) ?? [];

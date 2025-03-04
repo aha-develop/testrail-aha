@@ -38,6 +38,13 @@
             "aha-develop.testrail-aha.linkTestCase"
           ]
         },
+        "createTestCase": {
+          "title": "Create Test Case",
+          "entryPoint": "src/events/createTestCase.ts",
+          "handles": [
+            "aha-develop.testrail-aha.createTestCase"
+          ]
+        },
         "syncStatuses": {
           "title": "Sync Statuses",
           "entryPoint": "src/events/syncStatuses.ts",
@@ -57,6 +64,13 @@
           "entryPoint": "src/events/syncSuites.ts",
           "handles": [
             "aha-develop.testrail-aha.syncSuites"
+          ]
+        },
+        "syncSections": {
+          "title": "Sync Sections",
+          "entryPoint": "src/events/syncSections.ts",
+          "handles": [
+            "aha-develop.testrail-aha.syncSections"
           ]
         },
         "syncCases": {
@@ -118,7 +132,7 @@
           "scope": [
             "account"
           ],
-          "default": 900
+          "default": 3600
         },
         "username": {
           "title": "TestRail API Username",

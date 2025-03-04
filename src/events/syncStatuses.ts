@@ -1,5 +1,6 @@
 import { IDENTIFIER, Status } from '../extension';
 import { fetchTestRail, logResult, BaseParams } from '../lib/api';
+import { truncate } from '../lib/util';
 
 export const syncStatuses: (props: BaseParams) => Promise<void> = async ({
   domain,
@@ -21,8 +22,10 @@ export const syncStatuses: (props: BaseParams) => Promise<void> = async ({
     const statuses = json.map(status => ({
       id: status.id,
       kind: 'Status',
-      label: status.name,
-      color: status.color_medium,
+      label: truncate(status.name),
+      colorBright: status.color_bright,
+      colorMedium: status.color_medium,
+      colorDark: status.color_dark,
     })) as Status[];
 
     await logResult({

@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
-import { IDENTIFIER } from '../../extension';
-import { getTestCases } from '../../lib/extensionFields/queries';
-import { linkTestCase } from '../../lib/extensionFields/updates';
+import { IDENTIFIER, TestCase } from '../../extension';
+import { getRecords } from '../../lib/extensionFields/queries';
+import { linkRecord } from '../../lib/extensionFields/updates';
 import { ExtensionRecord } from '../../lib/extensionRecord';
 import SmartSpinner from '../SmartSpinner';
 
@@ -11,13 +11,13 @@ type Props = {
 };
 
 type LinkOrSyncProps = {
-  caseId: string;
+  caseId: number;
 };
 
 const testCaseSynced: (props: LinkOrSyncProps) => Promise<boolean> = async ({
   caseId,
 }) => {
-  const testCases = await getTestCases([caseId]);
+  const testCases = await getRecords<TestCase>([caseId], 'TestCase');
 
   return testCases.length !== 0;
 };
@@ -54,7 +54,7 @@ const LinkByIdForm: React.FC<Props> = ({ domain, record }) => {
 
     setValidation(null);
 
-    const caseIdNum = caseId.replace(/[cC]/, '');
+    const caseIdNum = Number.parseInt(caseId.replace(/[cC]/, ''));
 
     setSyncing(true);
     setMessage('Checking if test case already synced...');
@@ -73,12 +73,12 @@ const LinkByIdForm: React.FC<Props> = ({ domain, record }) => {
         id: record.id,
         domain,
         typename: record.typename,
-        caseId,
+        caseId: caseIdNum,
         eventKey,
       });
     } else {
       setMessage('Test case found, linking to record...');
-      await linkTestCase(record, caseId);
+      await linkRecord(record, caseIdNum, 'caseIds');
       setMessage('Test case linked successfully');
 
       spinnerCleanup();

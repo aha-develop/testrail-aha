@@ -1,5 +1,6 @@
 import { IDENTIFIER, TestCase } from '../extension';
 import { fetchTestRail, logResult, BaseParams } from '../lib/api';
+import { truncate } from '../lib/util';
 
 type SyncTestCasesProps = BaseParams & {
   projectId: string;
@@ -44,13 +45,14 @@ const syncTestCases: (props: SyncTestCasesProps) => void = async ({
 
     if (!json) return; // Error already logged
 
-    const cases = json.cases.map(testCase => ({
+    const cases: TestCase[] = json.cases.map(testCase => ({
       id: testCase.id,
       kind: 'TestCase',
-      projectId: projectId, // Test cases API call doesn't return project ID
+      projectId: Number.parseInt(projectId), // Test cases API call doesn't return project ID
       suiteId: testCase.suite_id,
-      title: testCase.title,
-    })) as TestCase[];
+      title: truncate(testCase.title),
+      createdOn: testCase.created_on,
+    }));
 
     const hasMore = json['_links']?.next !== null;
 

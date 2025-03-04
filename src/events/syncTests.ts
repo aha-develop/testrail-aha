@@ -4,7 +4,6 @@ import { fetchTestRail, logResult, BaseParams } from '../lib/api';
 type SyncTestParams = BaseParams & {
   runId: string;
   page?: number;
-  updatedAfter?: number;
 };
 
 const syncTests: (props: SyncTestParams) => void = async ({
@@ -13,7 +12,6 @@ const syncTests: (props: SyncTestParams) => void = async ({
   eventKey,
   runId,
   page,
-  updatedAfter,
 }) => {
   try {
     console.log(
@@ -22,8 +20,6 @@ const syncTests: (props: SyncTestParams) => void = async ({
 
     const offset = page ? (page - 1) * 250 : 0;
     const params = [`offset=${offset}`];
-
-    if (updatedAfter) params.push(`updated_after=${updatedAfter}`);
 
     const json = await fetchTestRail({
       domain,
@@ -40,7 +36,6 @@ const syncTests: (props: SyncTestParams) => void = async ({
       caseId: test.case_id,
       runId: test.run_id,
       statusId: test.status_id,
-      title: test.title,
     })) as Test[];
 
     const hasMore = json['_links']?.next !== null;
@@ -66,14 +61,13 @@ const syncTests: (props: SyncTestParams) => void = async ({
 
 aha.on(
   { event: `${IDENTIFIER}.syncTests` },
-  async ({ domain, eventKey, page, runId, updatedAfter }) => {
+  async ({ domain, eventKey, page, runId }) => {
     await syncTests({
       record: aha.account,
       domain,
       eventKey,
       page,
       runId,
-      updatedAfter,
     });
   }
 );

@@ -18,15 +18,15 @@ export const Styles = () => {
         }
 
         .text-gray {
-          color: #666666;
+          color: var(--theme-tertiary-text);
         }
 
         .text-error {
-          color: #c9250e;
+          color: var(--theme-error-message);
         }
 
         .text-strong {
-          font-weight: bold;
+          font-weight: 600;
         }
 
         .tab-header {
@@ -37,79 +37,75 @@ export const Styles = () => {
 
         .tab-header-left {
           display: flex;
-          gap: 11px;
+          gap: var(--spacer-3);
           align-items: baseline;
         }
 
         .tab-header-right {
           display: flex;
-          gap: 7px;
+          gap: var(--spacer-2);
           align-items: baseline;
-        }
-
-        .tab-title {
-          line-height: 20px;
-          color: #333333;
         }
 
         .test-row {
           display: flex;
-          align-items: center;
-          padding: 8px 6px 8px 12px;
-          border: 1px solid #e1e1e1;
+          align-items: flex-start;
+          padding: var(--spacer-2) var(--spacer-2) var(--spacer-2)
+            var(--spacer-3);
+          border: var(--Common--border);
           border-top: none;
           justify-content: space-between;
         }
 
         .test-row:first-child {
-          border-top: 1px solid #e1e1e1;
+          border-top: var(--Common--border);
         }
 
         .test-row-column {
           display: flex;
-          gap: 10px;
+          gap: var(--spacer-3);
           align-items: center;
+          line-height: var(--line-height-t-050);
+        }
+
+        .test-ref {
+          align-self: flex-start;
         }
 
         .test-title {
-          font-size: 14px;
+          font-size: var(--font-size-100);
           font-weight: 500;
-        }
-
-        .test-comment {
-          font-size: 12px;
-          color: #666666;
         }
 
         .spinner {
           display: flex;
           gap: 0.5rem;
-          padding-top: 5px;
-          padding-left: 20px;
+          padding-top: var(--spacer-1);
+          padding-left: var(--spacer-5);
         }
 
         .sections {
           background-color: var(--theme-secondary-background);
           display: flex;
-          padding: 16px;
-          gap: 18px;
+          padding: var(--spacer-4);
+          gap: var(--spacer-5);
           flex-wrap: wrap;
           justify-content: space-between;
         }
 
         .sections section {
           background: var(--theme-primary-background);
-          border: 1px solid var(--theme-primary-border);
+          border: var(--Common--border);
           box-shadow: 0px 0px 8px rgba(0, 0, 0, 0.08);
-          border-radius: 4px;
+          border-radius: var(--Common--border-radius);
           display: flex;
           flex-direction: column;
           width: 800px;
         }
 
         .sections h2 {
-          border-bottom: 1px solid var(--theme-primary-border);
-          padding: 15px 21px;
+          border-bottom: var(--Common--border);
+          padding: var(--spacer-4) var(--spacer-5);
           margin: 0;
 
           font-style: normal;
@@ -120,75 +116,87 @@ export const Styles = () => {
         }
 
         .sections .subsection {
-          padding: 21px 26px;
+          padding: var(--spacer-5) var(--spacer-6);
           display: flex;
           flex-direction: row;
-          gap: 20px;
+          gap: var(--spacer-5);
           align-items: center;
         }
 
         .sections h3 {
           font-style: normal;
-          font-weight: bold;
+          font-weight: 600;
           font-size: 18px;
           line-height: 21px;
         }
 
         .id-form {
           display: flex;
-          gap: 0.5rem;
+          gap: var(--spacer-2);
           align-items: start;
         }
 
         .modal-form {
           display: flex;
           flex-direction: column;
-          gap: 1rem;
+          gap: var(--spacer-4);
         }
 
         .search-form {
           display: flex;
           flex-direction: column;
-          gap: 24px;
-          padding-top: 10px;
+          gap: var(--spacer-6);
+          padding-top: var(--spacer-2);
         }
 
         .search-section {
           display: flex;
           flex-direction: column;
-          border-radius: 4px;
-          border: 1px solid #e1e1e1;
-          background-color: #f7f7f7;
+          border-radius: var(--Common--border-radius);
+          border: var(--Common--border);
+          background-color: var(--theme-secondary-background);
         }
 
         .search-input {
-          padding: 8px 6px;
+          padding: var(--spacer-2) var(--spacer-1);
         }
 
-        .search-results {
+        .id-form input,
+        .search-input input {
+          color: var(--theme-accent-icon);
+          background-color: var(--theme-primary-background);
+        }
+
+        .search-result-container {
           height: 250px;
           overflow-y: auto;
-          border-top: 1px solid #e1e1e1;
-          padding: 6px 5px;
+          border-top: var(--Common--border);
+          padding: var(--spacer-1);
         }
 
         .search-row {
-          padding: 4px 6px;
+          padding: var(--spacer-1) var(--spacer-2);
           min-height: 24px;
-          font-size: 12px;
         }
 
         .search-header {
-          line-height: 20px;
-          font-size: 12px;
-          font-weight: bold;
+          line-height: var(--line-height-t-050);
+          font-weight: 600;
+        }
+
+        .search-sub-header {
+          font-weight: 500;
         }
 
         .search-result {
-          padding-left: 15px;
-          line-height: 16px;
+          padding-left: var(--spacer-4);
           display: flex;
-          gap: 10px;
+          justify-content: space-between;
+        }
+
+        .search-column {
+          display: flex;
+          gap: var(--spacer-2);
         }
 
         .search-text {
@@ -196,37 +204,38 @@ export const Styles = () => {
           gap: 4px;
         }
 
-        .search-ref {
-          font-weight: 300;
-          color: #666666;
-        }
-
         .form-loading {
           display: flex;
-          gap: 0.5rem;
-          padding-bottom: 10px;
+          gap: var(--spacer-2);
+          padding-bottom: var(--spacer-3);
         }
 
         .sync-progress {
           display: flex;
           flex-direction: column;
-          gap: 10px;
+          gap: var(--spacer-2);
         }
 
         .search-footer {
-          border-top: 1px solid #e1e1e1;
-          padding: 12px 15px;
+          display: flex;
+          align-items: center;
+          gap: var(--spacer-2);
+          border-top: var(--Common--border);
+          padding: var(--spacer-3) var(--spacer-4);
         }
 
         .sync-message {
           display: flex;
-          gap: 4px;
+          gap: var(--spacer-1);
         }
 
         .sync-bar {
-          --aha-progress-bar--bar: #0073cf;
-          --aha-progress-bar--background: var(--aha-gray-300);
+          --aha-progress-bar--bar: var(--theme-link-text);
           --Common--border-radius: 30px;
+        }
+
+        .left-align-input {
+          --aha-field--label-width: inherit;
         }
       `}
     </style>
