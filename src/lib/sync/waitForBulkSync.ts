@@ -60,7 +60,7 @@ const waitForBulkSync: (props: WaitProps) => Promise<void> = async ({
     }
   }
 
-  if (state.state === SyncState.Success) {
+  if (state.state === SyncState.Complete) {
     reload();
   }
 };

@@ -31,13 +31,6 @@
         }
       },
       "events": {
-        "linkTestCase": {
-          "title": "Link Test Case",
-          "entryPoint": "src/events/linkTestCase.ts",
-          "handles": [
-            "aha-develop.testrail-aha.linkTestCase"
-          ]
-        },
         "createTestCase": {
           "title": "Create Test Case",
           "entryPoint": "src/events/createTestCase.ts",

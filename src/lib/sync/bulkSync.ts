@@ -186,11 +186,6 @@ const bulkSync: (props: SyncProps) => Promise<void> = async ({
     updateState(state);
   };
 
-  // Because we're already calculating and storing the state, the caller
-  // doesn't need to wait on sync to finish.
-  setShouldWait(false);
-  await setSyncState(syncState);
-
   const failSync = () => {
     const newState = { ...syncState, state: SyncState.Errored };
     setSyncState(newState);
@@ -198,6 +193,11 @@ const bulkSync: (props: SyncProps) => Promise<void> = async ({
 
   // If this doesn't fire, we still have the max wait time as a fallback
   window.addEventListener('beforeunload', failSync);
+
+  // Because we're already calculating and storing the state, the caller
+  // doesn't need to wait on sync to finish.
+  setShouldWait(false);
+  await setSyncState(syncState);
 
   try {
     if (syncState.stage === SyncStage.Statuses) {

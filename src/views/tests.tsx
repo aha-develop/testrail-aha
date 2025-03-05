@@ -5,7 +5,7 @@ import { unlinkRecord } from '../lib/extensionFields/updates';
 import { timeAgo, formatTime, numberToColor } from '../lib/util';
 import RecordLink from '../components/RecordLink';
 import { Styles } from '../components/Styles';
-import LinkTestCase from '../components/linkTestCase/LinkTestCase';
+import LinkTestCase from '../components/LinkTestCase';
 import LinkTest from '../components/linkTest/LinkTest';
 import CreateTestCase from '../components/CreateTestCase';
 import LinkTestToTestCase from '../components/LinkTestToTestCase';
@@ -173,7 +173,7 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
     }
 
     initData();
-  }, [caseIds, reload]);
+  }, [caseIds, testIds, reload]);
 
   let caseRows = null;
 
@@ -218,35 +218,48 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
 
       <div className='tab-header'>
         <div className='tab-header-left'>
-          <h4 className='h-400'>Tests</h4>
-          <aha-button onClick={() => setLinkCaseModalOpen(true)} kind='link'>
-            <aha-icon icon='fa-regular fa-link' />
-            Link a test case
-          </aha-button>
-          {linkCaseModalOpen && (
-            <LinkTestCase
-              domain={domain}
-              record={record}
-              syncData={syncData}
-              onClose={onClose(setLinkCaseModalOpen)}
-            />
-          )}
-          <aha-button onClick={() => setLinkTestModalOpen(true)} kind='link'>
-            <aha-icon icon='fa-regular fa-link' />
-            Link a test
-          </aha-button>
-          {linkTestModalOpen && (
-            <LinkTest
-              record={record}
-              syncData={syncData}
-              onClose={onClose(setLinkTestModalOpen)}
-            />
-          )}
-          <aha-button onClick={() => setCreateCaseModalOpen(true)} kind='link'>
-            <aha-icon icon='fa-regular fa-circle-plus' />
-            Create a test case
-          </aha-button>
+          <div className='h-400'>Tests</div>
+          <aha-menu>
+            <aha-button kind='secondary' slot='control'>
+              <aha-icon icon='fa-regular fa-circle-plus' />
+              Add
+            </aha-button>
+            <aha-menu-content>
+              <aha-menu-item>
+                <a onClick={() => setLinkCaseModalOpen(true)}>
+                  <aha-icon icon='fa-regular fa-link' />
+                  Link a test case
+                </a>
+              </aha-menu-item>
+              <aha-menu-item>
+                <a onClick={() => setLinkTestModalOpen(true)}>
+                  <aha-icon icon='fa-regular fa-link' />
+                  Link a test
+                </a>
+              </aha-menu-item>
+              <aha-menu-item>
+                <a onClick={() => setCreateCaseModalOpen(true)}>
+                  <aha-icon icon='fa-regular fa-circle-plus' />
+                  Create a test case
+                </a>
+              </aha-menu-item>
+            </aha-menu-content>
+          </aha-menu>
         </div>
+        {linkCaseModalOpen && (
+          <LinkTestCase
+            record={record}
+            syncData={syncData}
+            onClose={onClose(setLinkCaseModalOpen)}
+          />
+        )}
+        {linkTestModalOpen && (
+          <LinkTest
+            record={record}
+            syncData={syncData}
+            onClose={onClose(setLinkTestModalOpen)}
+          />
+        )}
         {createCaseModalOpen && (
           <CreateTestCase
             domain={domain}
@@ -261,6 +274,11 @@ const TestsTab: React.FC<TabProps> = ({ record, fields, settings }) => {
               <span className='text-small text-light'>
                 Last updated: {timeAgo(syncData.lastSync)}
               </span>
+              {syncData.state === SyncState.Errored && (
+                <span className='text-small text-light text-error'>
+                  Failed to sync
+                </span>
+              )}
               <aha-button
                 onClick={() =>
                   waitForBulkSync({

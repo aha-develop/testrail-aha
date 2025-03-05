@@ -4,7 +4,6 @@ import { truncate } from '../lib/util';
 
 type TestRunProps = BaseParams & {
   projectId: string;
-  createdAfter?: number;
 };
 
 type SyncActiveTestRunsProps = TestRunProps & {
@@ -27,7 +26,6 @@ const syncActiveTestRuns: (props: SyncActiveTestRunsProps) => void = async ({
   eventKey,
   page,
   projectId,
-  createdAfter,
 }) => {
   console.log(
     `Beginning sync of active TestRail test runs for project: ${projectId} page: ${page}`
@@ -40,21 +38,13 @@ const syncActiveTestRuns: (props: SyncActiveTestRunsProps) => void = async ({
     eventKey,
     offset,
     projectId,
-    createdAfter,
     completed: 0,
   });
 };
 
 const syncCompletedTestRuns: (
   props: SyncCompletedTestRunsProps
-) => void = async ({
-  domain,
-  record,
-  eventKey,
-  limit,
-  projectId,
-  createdAfter,
-}) => {
+) => void = async ({ domain, record, eventKey, limit, projectId }) => {
   console.log(
     `Beginning sync of completed TestRail test runs for project: ${projectId}`
   );
@@ -65,7 +55,6 @@ const syncCompletedTestRuns: (
     eventKey,
     limit,
     projectId,
-    createdAfter,
     completed: 1,
   });
 };
@@ -76,7 +65,6 @@ const syncTestRuns: (props: SyncTestRunsProps) => void = async ({
   eventKey,
   offset,
   projectId,
-  createdAfter,
   completed,
   limit,
 }) => {
@@ -84,7 +72,6 @@ const syncTestRuns: (props: SyncTestRunsProps) => void = async ({
     const params = [`is_completed=${completed}`];
 
     if (offset) params.push(`offset=${offset}`);
-    if (createdAfter) params.push(`created_after=${createdAfter}`);
     if (limit) params.push(`limit=${limit}`);
 
     const path = `get_runs/${projectId}&${params.join('&')}`;
@@ -130,15 +117,7 @@ const syncTestRuns: (props: SyncTestRunsProps) => void = async ({
 
 aha.on(
   { event: `${IDENTIFIER}.syncRuns` },
-  async ({
-    domain,
-    eventKey,
-    page,
-    projectId,
-    createdAfter,
-    isCompleted,
-    limit,
-  }) => {
+  async ({ domain, eventKey, page, projectId, isCompleted, limit }) => {
     if (isCompleted === 1) {
       await syncCompletedTestRuns({
         record: aha.account,
@@ -154,7 +133,6 @@ aha.on(
         eventKey,
         projectId,
         page,
-        createdAfter,
       });
     }
   }

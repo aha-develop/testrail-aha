@@ -44,9 +44,13 @@ const ResultSection: React.FC<SectionProps> = ({
   let filtered = tree.children;
 
   const matchesQuery = (node: TreeNode): boolean => {
+    const queryText = showReference
+      ? `${referencePrefix}${node.value}${node.text}`
+      : node.text;
+
     return (
       node.children?.some(child => matchesQuery(child)) ||
-      node.text.toLowerCase().includes(query.toLowerCase())
+      queryText.toLowerCase().includes(query.trim().toLowerCase())
     );
   };
 
@@ -67,25 +71,22 @@ const ResultSection: React.FC<SectionProps> = ({
       )}
       {filtered.map(node => (
         <>
-          <div key={node.value} className='search-row' style={style}>
+          <div
+            key={node.value}
+            className={`search-row${
+              selected.includes(node.value) ? ' selected' : ''
+            }`}
+            style={style}
+            onClick={onSelectBuilder(node.value)}
+          >
             <div className='search-result'>
               <div className='search-column'>
                 {selected.includes(node.value) ? (
-                  <input
-                    type='checkbox'
-                    checked
-                    onClick={event => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      event.target['checked'] = true;
-                    }}
-                  />
+                  <aha-icon class='search-selected' icon='fa-solid fa-check' />
                 ) : (
-                  <input
-                    type='checkbox'
-                    onChange={onSelectBuilder(node.value)}
-                  />
+                  <aha-icon icon='fa-regular fa-square' />
                 )}
+
                 <div className='search-text'>
                   {showReference && (
                     <div className='text-light text-gray'>{`${referencePrefix}${node.value}`}</div>
@@ -159,7 +160,7 @@ const SearchByName: React.FC<Props> = ({
       </div>
       <div className='search-result-container'>
         {loading ? (
-          <aha-loading-row rows={5} columns={2} />
+          <aha-loading-row class='search-loader' rows={5} columns={2} />
         ) : (
           tree.map(header => (
             <ResultSection
@@ -174,7 +175,7 @@ const SearchByName: React.FC<Props> = ({
           ))
         )}
       </div>
-      <div className='search-footer'>{children}</div>
+      {children && <div className='search-footer'>{children}</div>}
     </div>
   );
 };

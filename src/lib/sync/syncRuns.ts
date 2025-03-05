@@ -4,20 +4,18 @@ import {
   waitForPagedLambda,
   waitForIndexedLambda,
 } from './interface';
-import { saveRecords } from '../extensionFields/updates';
+import { saveRecords, saveNewRecords } from '../extensionFields/updates';
 
 // We don't want to fetch more than a page of completed runs per project, to avoid loading up on historic data.
 const NUM_COMPLETED_RUNS = 250;
 
 type SyncProps = BaseSyncProps & {
   projectIds: number[];
-  lastRunSync?: number;
 };
 
 export const syncOpenRuns: (props: SyncProps) => Promise<TestRun[]> = async ({
   domain,
   projectIds,
-  lastRunSync,
   logger,
 }) => {
   if (!projectIds?.length) {
@@ -29,10 +27,6 @@ export const syncOpenRuns: (props: SyncProps) => Promise<TestRun[]> = async ({
   const now = Date.now();
 
   let eventKey = `syncRuns-${Date.now()}`;
-
-  const args = { domain, isCompleted: 0 };
-
-  if (lastRunSync) args['createdAfter'] = Math.floor(lastRunSync / 1000);
 
   const lambdaFunc = async args => {
     await aha.triggerServer(`${IDENTIFIER}.syncRuns`, args);
@@ -47,7 +41,7 @@ export const syncOpenRuns: (props: SyncProps) => Promise<TestRun[]> = async ({
   const openRuns = await waitForIndexedLambda<TestRun>({
     lambdaFunc,
     progressFunc,
-    args,
+    args: { domain, isCompleted: 0 },
     eventKey,
     argFunc,
     numIds: projectIds.length,
@@ -103,9 +97,11 @@ export const syncCompletedRuns: (
   logger('Successfully fetched all completed test runs');
 
   logger('Saving completed test runs to Aha!');
-  await saveRecords<TestRun>(completedRuns);
+
+  const newRuns = await saveNewRecords<TestRun>(completedRuns);
+
   await aha.account.setExtensionField(IDENTIFIER, 'lastCompletedRunSync', now);
   logger('Successfully saved all completed test runs');
 
-  return completedRuns;
+  return newRuns;
 };

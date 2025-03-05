@@ -1,5 +1,6 @@
 import React from 'react';
 import { BulkSyncState, SyncState, SyncStage } from '../lib/sync/bulkSync';
+import { timeAgo } from '../lib/util';
 
 const messageFromState = (state: BulkSyncState) => {
   if (!state) {
@@ -7,7 +8,7 @@ const messageFromState = (state: BulkSyncState) => {
   }
 
   if (state.state === SyncState.Complete) {
-    return 'Syncing complete';
+    return `Syncing complete - last updated: ${timeAgo(state.lastSync)}`;
   }
 
   let type;
@@ -57,6 +58,10 @@ const SyncProgress: React.FC<{ syncData: BulkSyncState }> = ({ syncData }) => {
 
   const message = messageFromState(syncData);
 
+  if (syncData?.state === SyncState.Complete) {
+    return <div className='text-success'>{message}</div>;
+  }
+
   return (
     <div className='sync-progress'>
       <div className='sync-message'>
@@ -66,7 +71,7 @@ const SyncProgress: React.FC<{ syncData: BulkSyncState }> = ({ syncData }) => {
         </span>
       </div>
       <aha-progress-bar
-        class='sync-bar' // className isn't valid here
+        class='sync-bar'
         total={100}
         completed={syncData?.progress || 0}
         no-text

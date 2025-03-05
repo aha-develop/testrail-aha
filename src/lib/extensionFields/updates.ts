@@ -54,6 +54,27 @@ export const saveRecords: <T extends TestRailRecord>(
   await updateRecordIndexes(records);
 };
 
+export const saveNewRecords: <T extends TestRailRecord>(
+  records: T[]
+) => Promise<T[]> = async <T extends TestRailRecord>(records) => {
+  if (records.length === 0) return [];
+
+  const newRecords = [];
+
+  const keys = records.map(record => fieldName(record.kind, record.id));
+  const map = await getAccountExtensionFieldMap<T>(keys);
+
+  for (const record of records) {
+    if (map[fieldName(record.kind, record.id)]) continue;
+
+    newRecords.push(record);
+  }
+
+  await saveRecords<T>(newRecords);
+
+  return newRecords;
+};
+
 const updateRecordIndexes: <T extends TestRailRecord>(
   records: T[]
 ) => Promise<void> = async records => {

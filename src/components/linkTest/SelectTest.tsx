@@ -1,7 +1,6 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { TestCase, Test } from '../../extension';
-import { BulkSyncState } from '../../lib/sync/bulkSync';
-import { ExtensionRecord } from '../../lib/extensionRecord';
+import { BulkSyncState, SyncStage, SyncState } from '../../lib/sync/bulkSync';
 import SearchByName, { TreeNode } from '../SearchByName';
 import { getRunMapForTestCase } from '../../lib/extensionFields/queries';
 import SyncProgress from '../SyncProgress';
@@ -33,15 +32,19 @@ const runOptions: (
   ];
 };
 
-const SelectRun: React.FC<Props> = ({
+const SelectTest: React.FC<Props> = ({
   caseId,
   syncData,
   testId,
   updateTestId,
 }) => {
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(null);
+  const [syncingTests, setSyncingTests] = useState(false);
 
   const [runTree, setRunTree] = useState<TreeNode[]>([]);
+
+  const [savedCaseId, setSavedCaseId] = useState<string>(caseId);
 
   useEffect(() => {
     const fetchRuns = async () => {
@@ -56,8 +59,32 @@ const SelectRun: React.FC<Props> = ({
       setLoading(false);
     };
 
+    const caseIdChanged = caseId !== savedCaseId;
+
+    if (caseIdChanged) {
+      setSavedCaseId(caseId);
+    }
+
+    if (syncData && syncing === null) {
+      setSyncing(syncData.state !== SyncState.Complete);
+    }
+
+    const lastState = syncingTests;
+    let currentState = syncingTests;
+
+    if (syncData) {
+      currentState = syncData.stage <= SyncStage.Tests;
+      setSyncingTests(currentState);
+    }
+
+    // Load on first render, if caseId changes, or if new tests potentially synced
+    const shouldLoad =
+      caseId && (loading || caseIdChanged || (!lastState && currentState));
+
+    if (shouldLoad) fetchRuns();
+
     if (caseId) fetchRuns();
-  }, [caseId]);
+  }, [caseId, syncData]);
 
   return (
     <div className='search-form'>
@@ -69,10 +96,10 @@ const SelectRun: React.FC<Props> = ({
         referencePrefix='T'
         loading={loading}
       >
-        <SyncProgress syncData={syncData} />
+        {syncing && <SyncProgress syncData={syncData} />}
       </SearchByName>
     </div>
   );
 };
 
-export default SelectRun;
+export default SelectTest;

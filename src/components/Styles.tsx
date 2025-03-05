@@ -25,6 +25,10 @@ export const Styles = () => {
           color: var(--theme-error-message);
         }
 
+        .text-success {
+          color: var(--aha-green-700);
+        }
+
         .text-strong {
           font-weight: 600;
         }
@@ -32,19 +36,18 @@ export const Styles = () => {
         .tab-header {
           display: flex;
           justify-content: space-between;
-          align-items: baseline;
+          align-items: center;
+          margin-bottom: var(--spacer-5);
         }
 
         .tab-header-left {
           display: flex;
-          gap: var(--spacer-3);
-          align-items: baseline;
+          gap: var(--spacer-4);
         }
 
         .tab-header-right {
           display: flex;
           gap: var(--spacer-2);
-          align-items: baseline;
         }
 
         .test-row {
@@ -161,9 +164,8 @@ export const Styles = () => {
           padding: var(--spacer-2) var(--spacer-1);
         }
 
-        .id-form input,
         .search-input input {
-          color: var(--theme-accent-icon);
+          color: var(--theme-secondary-text);
           background-color: var(--theme-primary-background);
         }
 
@@ -172,11 +174,22 @@ export const Styles = () => {
           overflow-y: auto;
           border-top: var(--Common--border);
           padding: var(--spacer-1);
+          background-color: var(--theme-primary-background);
         }
 
         .search-row {
           padding: var(--spacer-1) var(--spacer-2);
           min-height: 24px;
+          display: flex;
+          align-items: center;
+        }
+
+        .search-row:hover:not(:has(.search-header)) {
+          background-color: var(--theme-secondary-background);
+        }
+
+        .search-row.selected {
+          background-color: var(--theme-blue-background);
         }
 
         .search-header {
@@ -192,6 +205,11 @@ export const Styles = () => {
           padding-left: var(--spacer-4);
           display: flex;
           justify-content: space-between;
+          flex-grow: 1;
+        }
+
+        .search-selected {
+          color: var(--theme-link-text);
         }
 
         .search-column {
@@ -214,6 +232,7 @@ export const Styles = () => {
           display: flex;
           flex-direction: column;
           gap: var(--spacer-2);
+          flex-grow: 1;
         }
 
         .search-footer {

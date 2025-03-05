@@ -6,7 +6,7 @@ import { getRecords, getProjectSections } from '../lib/extensionFields/queries';
 import { waitForLambda } from '../lib/sync/interface';
 import { APIResult } from '../lib/api';
 import { saveRecords, linkRecord } from '../lib/extensionFields/updates';
-import { BulkSyncState } from '../lib/sync/bulkSync';
+import { BulkSyncState, SyncStage, SyncState } from '../lib/sync/bulkSync';
 import SyncProgress from './SyncProgress';
 
 type Props = {
@@ -164,6 +164,9 @@ const CreateTestCase: React.FC<Props> = ({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(false);
 
+  const [syncing, setSyncing] = useState(null);
+  const [syncingSections, setSyncingSections] = useState(false);
+
   const [sectionId, setSectionId] = useState<string>(null);
   const sectionIdRef = useRef(sectionId);
   const projectIdRef = useRef(null);
@@ -206,8 +209,20 @@ const CreateTestCase: React.FC<Props> = ({
       setLoading(false);
     };
 
-    fetchSections();
-  }, []);
+    if (syncData && syncing === null) {
+      setSyncing(syncData.state !== SyncState.Complete);
+    }
+
+    const lastState = syncingSections;
+    let currentState = syncingSections;
+
+    if (syncData) {
+      currentState = syncData.stage <= SyncStage.Sections;
+      setSyncingSections(currentState);
+    }
+
+    if (loading || (!lastState && currentState)) fetchSections();
+  }, [syncData]);
 
   useEffect(() => {
     const modal = modalRef.current;
@@ -255,7 +270,7 @@ const CreateTestCase: React.FC<Props> = ({
           showReference={false}
           loading={loading}
         >
-          <SyncProgress syncData={syncData} />
+          {syncing && <SyncProgress syncData={syncData} />}
         </SearchByName>
       </aha-modal-body>
       <aha-modal-footer>

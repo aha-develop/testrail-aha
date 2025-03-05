@@ -7,7 +7,7 @@ import {
   getProjectTestCases,
 } from '../../lib/extensionFields/queries';
 import { ExtensionRecord } from '../../lib/extensionRecord';
-import { BulkSyncState } from '../../lib/sync/bulkSync';
+import { BulkSyncState, SyncStage, SyncState } from '../../lib/sync/bulkSync';
 
 type Props = {
   record: ExtensionRecord;
@@ -53,13 +53,15 @@ const caseOptions: (
   return options;
 };
 
-const LinkByNameForm: React.FC<Props> = ({
+const SelectTestCase: React.FC<Props> = ({
   record,
   syncData,
   caseId,
   setCaseId,
 }) => {
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(null); // True if syncing on initial load
+  const [syncingCases, setSyncingCases] = useState(false); // True if there may be new cases to sync
 
   const [caseTree, setCaseTree] = useState<TreeNode[]>([]);
 
@@ -84,8 +86,21 @@ const LinkByNameForm: React.FC<Props> = ({
       setLoading(false);
     };
 
-    fetchCases();
-  }, []);
+    if (syncData && syncing === null) {
+      setSyncing(syncData.state !== SyncState.Complete);
+    }
+
+    const lastState = syncingCases;
+    let currentState = syncingCases;
+
+    if (syncData) {
+      currentState = syncData.stage <= SyncStage.TestCases;
+      setSyncingCases(currentState);
+    }
+
+    // Fetch data on first load or if new cases potentially synced
+    if (loading || (!lastState && currentState)) fetchCases();
+  }, [syncData]);
 
   return (
     <div className='search-form'>
@@ -97,10 +112,10 @@ const LinkByNameForm: React.FC<Props> = ({
         referencePrefix='C'
         loading={loading}
       >
-        <SyncProgress syncData={syncData} />
+        {syncing && <SyncProgress syncData={syncData} />}
       </SearchByName>
     </div>
   );
 };
 
-export default LinkByNameForm;
+export default SelectTestCase;

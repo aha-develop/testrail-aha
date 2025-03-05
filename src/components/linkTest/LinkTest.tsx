@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ExtensionRecord } from '../../lib/extensionRecord';
 import { BulkSyncState } from '../../lib/sync/bulkSync';
 import SelectTestCase from './SelectTestCase';
-import SelectRun from './SelectRun';
+import SelectTest from './SelectTest';
 import { linkRecord } from '../../lib/extensionFields/updates';
 
 type Props = {
@@ -68,7 +68,7 @@ const LinkTest: React.FC<Props> = ({ record, syncData, onClose }) => {
           />
         </div>
         <div style={{ display: caseStep ? 'none' : 'block' }}>
-          <SelectRun
+          <SelectTest
             syncData={syncData}
             caseId={caseId}
             testId={testId}
