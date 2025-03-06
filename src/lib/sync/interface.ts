@@ -4,8 +4,9 @@ import { TIMEOUT_MESSAGE, RETRY_WAIT, APIResult, PagedAPIResult } from '../api';
 import { sleep } from '../util';
 import { getAccountExtensionFieldMap } from '../extensionFields/queries';
 
-// The lambda can only run for up to 10 seconds, but can take some time to spin up on a cold start.
-const MAX_POLL_TIME = 90 * 1000;
+// The lambda can only run for up to 10 seconds, but can take some time to spin up on a cold start
+// and tends to take longer with more concurrency.
+const MAX_POLL_TIME = 5 * 60 * 1000;
 const INIT_WAIT_TIME = 3 * 1000;
 const INTERVAL_TIME = 1 * 1000;
 
@@ -129,7 +130,7 @@ const waitForResults: (
   const errors = eventKeys.reduce((acc, key) => {
     acc[key] = {
       error: true,
-      message: 'Timeout waiting for lambda to complete',
+      message: 'Timeout waiting for lambda to complete - please try again',
     };
 
     return acc;

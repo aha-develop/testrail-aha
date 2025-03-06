@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import SearchByName, { TreeNode } from '../SearchByName';
+import SearchByName, { TreeNode } from './SearchByName';
 import SyncProgress from '../SyncProgress';
 import { IDENTIFIER, Project, TestCase } from '../../extension';
 import {
@@ -24,11 +24,14 @@ const caseOptions: (
   caseIds: number[]
 ) => TreeNode[] = (projects, caseMapping, caseIds) => {
   const options: TreeNode[] = [];
+  let idMapping: { [caseId: number]: boolean } = [];
 
-  const idMapping = caseIds.reduce((acc, id) => {
-    acc[id] = true;
-    return acc;
-  }, {});
+  if (caseIds && caseIds.length) {
+    idMapping = caseIds.reduce((acc, id) => {
+      acc[id] = true;
+      return acc;
+    }, {});
+  }
 
   for (const project of projects) {
     const cases = caseMapping[project.id] || [];
@@ -111,6 +114,8 @@ const SelectTestCase: React.FC<Props> = ({
         recordName='test case'
         referencePrefix='C'
         loading={loading}
+        label='Select a test case'
+        placeholder={'No synced test cases found.'}
       >
         {syncing && <SyncProgress syncData={syncData} />}
       </SearchByName>

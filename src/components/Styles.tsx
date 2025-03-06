@@ -148,8 +148,7 @@ export const Styles = () => {
         .search-form {
           display: flex;
           flex-direction: column;
-          gap: var(--spacer-6);
-          padding-top: var(--spacer-2);
+          gap: var(--spacer-4);
         }
 
         .search-section {
@@ -158,6 +157,15 @@ export const Styles = () => {
           border-radius: var(--Common--border-radius);
           border: var(--Common--border);
           background-color: var(--theme-secondary-background);
+        }
+
+        .search-label {
+          font-size: var(--font-size-100);
+          font-weight: 500;
+        }
+
+        .label-required {
+          color: var(--theme-button-danger);
         }
 
         .search-input {
@@ -186,6 +194,7 @@ export const Styles = () => {
 
         .search-row:hover:not(:has(.search-header)) {
           background-color: var(--theme-secondary-background);
+          cursor: pointer;
         }
 
         .search-row.selected {
@@ -215,6 +224,13 @@ export const Styles = () => {
         .search-column {
           display: flex;
           gap: var(--spacer-2);
+        }
+
+        .search-placeholder {
+          padding: var(--spacer-4);
+          font-size: var(--font-size-100);
+          font-weight: 300;
+          color: var(--theme-tertiary-text);
         }
 
         .search-text {

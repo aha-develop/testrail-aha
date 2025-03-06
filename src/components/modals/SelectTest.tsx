@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { TestCase, Test } from '../../extension';
 import { BulkSyncState, SyncStage, SyncState } from '../../lib/sync/bulkSync';
-import SearchByName, { TreeNode } from '../SearchByName';
+import SearchByName, { TreeNode } from './SearchByName';
 import { getRunMapForTestCase } from '../../lib/extensionFields/queries';
 import SyncProgress from '../SyncProgress';
 import { getRecords } from '../../lib/extensionFields/queries';
@@ -19,15 +19,19 @@ const runOptions: (
   testCase: TestCase,
   runMapping: [Test, string, number][]
 ) => TreeNode[] = (testCase, runMapping) => {
+  const children = runMapping.map(([test, runName, createdOn]) => ({
+    value: test.id.toString(),
+    text: runName,
+    date: createdOn * 1000,
+  }));
+
+  if (children.length === 0) return [];
+
   return [
     {
       value: testCase.id.toString(),
       text: testCase.title,
-      children: runMapping.map(([test, runName, createdOn]) => ({
-        value: test.id.toString(),
-        text: runName,
-        date: createdOn * 1000,
-      })),
+      children,
     },
   ];
 };
@@ -81,9 +85,11 @@ const SelectTest: React.FC<Props> = ({
     const shouldLoad =
       caseId && (loading || caseIdChanged || (!lastState && currentState));
 
-    if (shouldLoad) fetchRuns();
+    if (caseId && caseIdChanged) {
+      setLoading(true);
+    }
 
-    if (caseId) fetchRuns();
+    if (shouldLoad) fetchRuns();
   }, [caseId, syncData]);
 
   return (
@@ -95,6 +101,8 @@ const SelectTest: React.FC<Props> = ({
         recordName='test'
         referencePrefix='T'
         loading={loading}
+        label='Select a test'
+        placeholder={'No tests found for this test case.'}
       >
         {syncing && <SyncProgress syncData={syncData} />}
       </SearchByName>

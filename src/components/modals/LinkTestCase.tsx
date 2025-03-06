@@ -1,28 +1,27 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { TestCase } from '../extension';
-import { BulkSyncState } from '../lib/sync/bulkSync';
-import { ExtensionRecord } from '../lib/extensionRecord';
-import { linkRecord } from '../lib/extensionFields/updates';
-import SelectTest from './linkTest/SelectTest';
+import { ExtensionRecord } from '../../lib/extensionRecord';
+import { BulkSyncState } from '../../lib/sync/bulkSync';
+import SelectTestCase from './SelectTestCase';
+import { linkRecord } from '../../lib/extensionFields/updates';
 
 type Props = {
   record: ExtensionRecord;
-  testCase: TestCase;
   syncData: BulkSyncState;
   onClose: () => void;
 };
 
-const LinkTestToTestCase: React.FC<Props> = ({
-  record,
-  testCase,
-  syncData,
-  onClose,
-}) => {
+const LinkTestCase: React.FC<Props> = ({ record, syncData, onClose }) => {
   const modalRef = useRef(null);
+
+  const [caseId, setCaseId] = useState<string>(null);
   const [saving, setSaving] = useState(false);
 
-  const [testId, setTestId] = useState<string>(null);
-  const testIdRef = useRef(testId);
+  const caseIdRef = useRef<string>(null);
+
+  const updateCaseId = async (value: string) => {
+    caseIdRef.current = value;
+    setCaseId(value);
+  };
 
   useEffect(() => {
     const modal = modalRef.current;
@@ -31,19 +30,14 @@ const LinkTestToTestCase: React.FC<Props> = ({
     return () => {
       modal.removeEventListener('aha-modal:close', onClose);
     };
-  }, []);
-
-  const updateTestId = async value => {
-    testIdRef.current = value;
-    setTestId(value);
-  };
+  }, [onClose]);
 
   const submit = async () => {
-    if (!testIdRef.current) return;
+    if (!caseIdRef.current) return;
 
     setSaving(true);
 
-    await linkRecord(record, Number.parseInt(testIdRef.current), 'testIds');
+    await linkRecord(record, Number.parseInt(caseIdRef.current), 'caseIds');
 
     setSaving(false);
     onClose();
@@ -51,11 +45,11 @@ const LinkTestToTestCase: React.FC<Props> = ({
 
   return (
     <aha-modal ref={modalRef} open position='h-center' size='medium'>
-      <aha-modal-header modalTitle='Link test case to test'>
-        Link test case to test
+      <aha-modal-header modalTitle='Link test case'>
+        Link test case
       </aha-modal-header>
       <aha-modal-body>
-        {!syncData?.lastSync && (
+        {syncData && !syncData.lastSync && (
           <aha-alert class='mb-5' type='warning' dismissable>
             <div slot='heading'>We haven't fully synced with TestRail yet.</div>
             We're still gathering data from the TestRail API, so search results
@@ -63,24 +57,24 @@ const LinkTestToTestCase: React.FC<Props> = ({
             finished.
           </aha-alert>
         )}
-        <SelectTest
-          caseId={testCase.id.toString()}
+        <SelectTestCase
+          record={record}
           syncData={syncData}
-          testId={testId}
-          updateTestId={updateTestId}
+          caseId={caseId}
+          setCaseId={updateCaseId}
         />
       </aha-modal-body>
       <aha-modal-footer>
         <aha-button
           kind='primary'
-          disabled={saving || !testId ? true : null}
+          disabled={saving || !caseId ? true : null}
           onClick={submit}
         >
-          {saving ? 'Linking...' : 'Link to test'}
+          {saving ? 'Linking...' : 'Link to test case'}
         </aha-button>
       </aha-modal-footer>
     </aha-modal>
   );
 };
 
-export default LinkTestToTestCase;
+export default LinkTestCase;

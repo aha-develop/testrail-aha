@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { debounce } from 'lodash';
-import { formatTime } from '../lib/util';
+import { formatTime } from '../../lib/util';
 
 export type TreeNode = {
   value: string;
@@ -21,6 +21,8 @@ type Props = CommonProps & {
   onSelect: (value: string) => Promise<void>;
   recordName: string;
   loading: boolean;
+  placeholder: string;
+  label: string;
 };
 
 type SectionProps = CommonProps & {
@@ -60,7 +62,7 @@ const ResultSection: React.FC<SectionProps> = ({
 
   if (filtered.length === 0) return null;
 
-  const style = { marginLeft: `${nesting * 20}px` };
+  const style = { paddingLeft: `${nesting * 20}px` };
 
   return (
     <>
@@ -131,6 +133,8 @@ const SearchByName: React.FC<Props> = ({
   showReference = true,
   referencePrefix,
   loading,
+  placeholder,
+  label,
 }) => {
   const [query, setQuery] = useState<string>('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -148,35 +152,43 @@ const SearchByName: React.FC<Props> = ({
     };
 
   return (
-    <div className='search-section'>
-      <div className='search-input'>
-        <input
-          style={{ width: '300px', margin: '0' }}
-          ref={inputRef}
-          type='text'
-          placeholder={`Search by ${recordName} name`}
-          onInput={search}
-        />
+    <>
+      <div className='search-label'>
+        {label}
+        <span className='label-required'>*</span>
       </div>
-      <div className='search-result-container'>
-        {loading ? (
-          <aha-loading-row class='search-loader' rows={5} columns={2} />
-        ) : (
-          tree.map(header => (
-            <ResultSection
-              tree={header}
-              query={query}
-              selected={selected}
-              key={header.value}
-              onSelectBuilder={onSelectBuilder}
-              showReference={showReference}
-              referencePrefix={referencePrefix}
-            />
-          ))
-        )}
+      <div className='search-section'>
+        <div className='search-input'>
+          <input
+            style={{ width: '300px', margin: '0' }}
+            ref={inputRef}
+            type='text'
+            placeholder={`Search by ${recordName} name`}
+            onInput={search}
+          />
+        </div>
+        <div className='search-result-container'>
+          {loading ? (
+            <aha-loading-row class='search-loader' rows={5} columns={2} />
+          ) : tree.length === 0 ? (
+            <div className='search-placeholder'>{placeholder}</div>
+          ) : (
+            tree.map(header => (
+              <ResultSection
+                tree={header}
+                query={query}
+                selected={selected}
+                key={header.value}
+                onSelectBuilder={onSelectBuilder}
+                showReference={showReference}
+                referencePrefix={referencePrefix}
+              />
+            ))
+          )}
+        </div>
+        {children && <div className='search-footer'>{children}</div>}
       </div>
-      {children && <div className='search-footer'>{children}</div>}
-    </div>
+    </>
   );
 };
 

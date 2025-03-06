@@ -8,8 +8,11 @@ export const timeAgo: (timestamp: number | null) => string = timestamp => {
   return moment(timestamp).fromNow();
 };
 
-export const truncate: (text: string) => string = text =>
-  text.length > MAX_LENGTH ? text.slice(0, MAX_LENGTH) + '...' : text;
+export const truncate: (text: string) => string = text => {
+  if (!text) return text;
+
+  return text.length > MAX_LENGTH ? text.slice(0, MAX_LENGTH) + '...' : text;
+};
 
 export const formatTime: (timestamp: number) => string = timestamp =>
   moment(timestamp).format('MM/DD/YYYY');

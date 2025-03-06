@@ -51,7 +51,7 @@ const LinkTest: React.FC<Props> = ({ record, syncData, onClose }) => {
     <aha-modal ref={modalRef} open position='h-center' size='medium'>
       <aha-modal-header modalTitle='Link test'>Link test</aha-modal-header>
       <aha-modal-body>
-        {!syncData?.lastSync && (
+        {syncData && !syncData.lastSync && (
           <aha-alert class='mb-5' type='warning' dismissable>
             <div slot='heading'>We haven't fully synced with TestRail yet.</div>
             We're still gathering data from the TestRail API, so search results

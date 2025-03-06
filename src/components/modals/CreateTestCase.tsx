@@ -1,13 +1,16 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { IDENTIFIER, Project, Section, TestCase } from '../extension';
-import { ExtensionRecord } from '../lib/extensionRecord';
+import { IDENTIFIER, Project, Section, TestCase } from '../../extension';
+import { ExtensionRecord } from '../../lib/extensionRecord';
 import SearchByName, { TreeNode } from './SearchByName';
-import { getRecords, getProjectSections } from '../lib/extensionFields/queries';
-import { waitForLambda } from '../lib/sync/interface';
-import { APIResult } from '../lib/api';
-import { saveRecords, linkRecord } from '../lib/extensionFields/updates';
-import { BulkSyncState, SyncStage, SyncState } from '../lib/sync/bulkSync';
-import SyncProgress from './SyncProgress';
+import {
+  getRecords,
+  getProjectSections,
+} from '../../lib/extensionFields/queries';
+import { waitForLambda } from '../../lib/sync/interface';
+import { APIResult } from '../../lib/api';
+import { saveRecords, linkRecord } from '../../lib/extensionFields/updates';
+import { BulkSyncState, SyncStage, SyncState } from '../../lib/sync/bulkSync';
+import SyncProgress from '../SyncProgress';
 
 type Props = {
   domain: string;
@@ -76,6 +79,8 @@ const sectionOptions: (
         children: mapChildren(section),
       });
     }
+
+    if (children.length === 0) continue;
 
     const header: TreeNode = {
       value: project.id.toString(),
@@ -160,6 +165,8 @@ const CreateTestCase: React.FC<Props> = ({
   const modalRef = useRef(null);
   const titleRef = useRef(null);
 
+  const [title, setTitle] = useState('');
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState(false);
@@ -181,8 +188,8 @@ const CreateTestCase: React.FC<Props> = ({
     setSectionId(value);
   };
 
-  const submit = () => {
-    createTestCase({
+  const submit = async () => {
+    await createTestCase({
       domain,
       record,
       title: titleRef.current.value,
@@ -191,6 +198,8 @@ const CreateTestCase: React.FC<Props> = ({
       setSaving,
       setError,
     });
+
+    onClose();
   };
 
   useEffect(() => {
@@ -239,7 +248,7 @@ const CreateTestCase: React.FC<Props> = ({
         Create test case
       </aha-modal-header>
       <aha-modal-body>
-        {!syncData?.lastSync && (
+        {syncData && !syncData.lastSync && (
           <aha-alert class='mb-5' type='warning' dismissable>
             <div slot='heading'>We haven't fully synced with TestRail yet.</div>
             We're still gathering data from the TestRail API, so search results
@@ -260,27 +269,29 @@ const CreateTestCase: React.FC<Props> = ({
             ref={titleRef}
             type='text'
             placeholder='Enter test case name'
+            onInput={event => setTitle(event.target.value)}
           />
         </aha-field>
-        <SearchByName
-          tree={sectionTree}
-          selected={[sectionId]}
-          onSelect={updateSectionId}
-          recordName='section'
-          showReference={false}
-          loading={loading}
-        >
-          {syncing && <SyncProgress syncData={syncData} />}
-        </SearchByName>
+        <div className='search-form'>
+          <SearchByName
+            tree={sectionTree}
+            selected={[sectionId]}
+            onSelect={updateSectionId}
+            recordName='section'
+            showReference={false}
+            loading={loading}
+            label='Select a section'
+            placeholder={'No synced sections found.'}
+          >
+            {syncing && <SyncProgress syncData={syncData} />}
+          </SearchByName>
+        </div>
       </aha-modal-body>
       <aha-modal-footer>
         <aha-button
           kind='primary'
           disabled={
-            loading ||
-            saving ||
-            !sectionId ||
-            !titleRef.current?.value.trim().length
+            loading || saving || !sectionId || !title.trim().length
               ? true
               : null
           }
