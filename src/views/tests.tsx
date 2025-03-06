@@ -1,3 +1,5 @@
+import React from 'react';
+
 import FeatureTab from '../components/tabs/FeatureTab';
 import { isExtensionRecord } from '../lib/extensionRecord';
 
