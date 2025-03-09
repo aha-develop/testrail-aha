@@ -9,12 +9,14 @@ type WaitProps = {
   setState: (state: BulkSyncState) => void;
   domain: string;
   syncDelay: number;
+  reload: () => void;
 };
 
 const waitForBulkSync: (props: WaitProps) => Promise<void> = async ({
   setState,
   syncDelay,
   domain,
+  reload,
 }) => {
   let state;
   let shouldWait = true;
@@ -56,6 +58,10 @@ const waitForBulkSync: (props: WaitProps) => Promise<void> = async ({
       setState({ ...state, state: SyncState.Timeout });
       await sleep(retryAt - Date.now());
     }
+  }
+
+  if (state.state === SyncState.Complete) {
+    reload();
   }
 };
 

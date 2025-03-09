@@ -4,7 +4,7 @@ import { linkResultsToTests } from '../extensionFields/updates';
 
 type SyncProps = BaseSyncProps & {
   lastResultSync?: number;
-  runIds: string[];
+  runIds: number[];
 };
 
 const syncResults: (props: SyncProps) => Promise<TestResult[]> = async ({

@@ -3,13 +3,11 @@ import { BaseSyncProps, waitForIndexedLambda } from './interface';
 import { saveRecords } from '../extensionFields/updates';
 
 type SyncProps = BaseSyncProps & {
-  lastTestSync?: number;
-  runIds: string[];
+  runIds: number[];
 };
 
 const syncTests: (props: SyncProps) => Promise<Test[]> = async ({
   domain,
-  lastTestSync,
   runIds,
   logger,
 }) => {
@@ -24,8 +22,6 @@ const syncTests: (props: SyncProps) => Promise<Test[]> = async ({
 
   const eventKey = `syncTests-${now}`;
   const args = { domain };
-
-  if (lastTestSync) args['updatedAfter'] = Math.floor(lastTestSync / 1000);
 
   const lambdaFunc = async args => {
     await aha.triggerServer(`${IDENTIFIER}.syncTests`, args);

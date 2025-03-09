@@ -1,6 +1,10 @@
 import React from 'react';
 import { IDENTIFIER } from '../../extension';
-import syncSuites from '../../lib/sync/syncSuites';
+import syncSections from '../../lib/sync/syncSections';
+import {
+  indexKeyForKindAndParent,
+  getAccountExtensionFieldMap,
+} from '../../lib/extensionFields/queries';
 import BaseSection, { SectionProps, ResyncProps } from './BaseSection';
 
 const resync: (props: ResyncProps) => Promise<void> = async ({
@@ -14,8 +18,7 @@ const resync: (props: ResyncProps) => Promise<void> = async ({
   try {
     setSyncing(true);
     setLoading(true);
-
-    setMessage('Fetching projects for suites...');
+    setMessage('Fetching parent projects and suites for sections...');
 
     const projectIds =
       (await aha.account.getExtensionField<number[]>(
@@ -23,43 +26,57 @@ const resync: (props: ResyncProps) => Promise<void> = async ({
         'projectIds'
       )) ?? [];
 
-    if (projectIds.length === 0) {
-      setMessage('No projects found, aborting sync.');
-      return;
+    const keys = projectIds.map(projectId =>
+      indexKeyForKindAndParent('Suite', projectId)
+    );
+
+    const projectSuites = {};
+    const suiteFields = await getAccountExtensionFieldMap<string[]>(keys);
+
+    for (const key in suiteFields) {
+      const projectId = key.split('_')[1];
+
+      if (!projectSuites[projectId]) {
+        projectSuites[projectId] = [];
+      }
+
+      projectSuites[projectId].push(...suiteFields[key]);
     }
 
     const now = Date.now();
 
-    await syncSuites({
+    await syncSections({
       domain,
       logger: setMessage,
-      projectIds,
+      projectSuites,
     });
+
     await setLastSync(now);
   } catch (error) {
     setMessage(null);
     setError(error.message);
+    throw error;
   } finally {
     setLoading(false);
     setSyncing(false);
   }
 };
 
-const SuiteSection: React.FC<SectionProps> = ({
+const SectionSection: React.FC<SectionProps> = ({
   domain,
   disabled,
   setDisabled,
 }) => {
   return (
     <BaseSection
-      title='Sync suites'
+      title='Sync sections'
       resync={resync}
       domain={domain}
       disabled={disabled}
       setDisabled={setDisabled}
-      syncKey={'lastSuiteSync'}
+      syncKey={'lastSectionSync'}
     />
   );
 };
 
-export default SuiteSection;
+export default SectionSection;

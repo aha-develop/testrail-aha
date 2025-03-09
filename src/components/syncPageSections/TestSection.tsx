@@ -5,7 +5,6 @@ import BaseSection, { SectionProps, ResyncProps } from './BaseSection';
 
 const resync: (props: ResyncProps) => Promise<void> = async ({
   domain,
-  lastSync,
   setLoading,
   setSyncing,
   setLastSync,
@@ -24,7 +23,6 @@ const resync: (props: ResyncProps) => Promise<void> = async ({
       domain,
       logger: setMessage,
       runIds,
-      lastTestSync: lastSync,
     });
     await setLastSync(now);
   } catch (error) {
@@ -47,7 +45,6 @@ const TestSection: React.FC<SectionProps> = ({
       resync={resync}
       domain={domain}
       disabled={disabled}
-      hasToggle={true}
       setDisabled={setDisabled}
       syncKey={'lastTestSync'}
     />

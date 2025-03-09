@@ -1,29 +1,27 @@
 import { BaseSyncProps, waitForIndexedLambda } from './interface';
 import { saveRecords } from '../extensionFields/updates';
-import { IDENTIFIER, TestCase } from '../../extension';
+import { IDENTIFIER, Section } from '../../extension';
 
 type SyncProps = BaseSyncProps & {
-  lastCaseSync: number;
   projectSuites: {
     [projectId: string]: number[];
   };
 };
 
-const syncCases: (props: SyncProps) => Promise<TestCase[]> = async ({
+const syncSections: (props: SyncProps) => Promise<Section[]> = async ({
   domain,
-  lastCaseSync,
   projectSuites,
   logger,
 }) => {
   if (Object.keys(projectSuites).length === 0) {
-    throw new Error('No synced projects found, aborting test case sync.');
+    throw new Error('No synced projects found, aborting section sync.');
   }
 
-  logger('Beginning load of test cases from TestRail');
+  logger('Beginning load of sections from TestRail');
 
   const now = Date.now();
 
-  let eventKey = `syncCases-${Date.now()}`;
+  let eventKey = `syncSections-${Date.now()}`;
   const args = { domain };
 
   const lambdaArgs = [];
@@ -39,19 +37,16 @@ const syncCases: (props: SyncProps) => Promise<TestCase[]> = async ({
     }
   }
 
-  if (lastCaseSync) args['updatedAfter'] = Math.floor(lastCaseSync / 1000);
-
   const lambdaFunc = async args => {
-    await aha.triggerServer(`${IDENTIFIER}.syncCases`, args);
+    await aha.triggerServer(`${IDENTIFIER}.syncSections`, args);
   };
 
   const progressFunc = async (firstPage, lastPage) => {
-    logger(`Fetching test cases, pages ${firstPage} to ${lastPage}...`);
+    logger(`Fetching sections, pages ${firstPage} to ${lastPage}...`);
   };
 
   const argFunc = (index: number) => lambdaArgs[index];
-
-  const testCases = await waitForIndexedLambda<TestCase>({
+  const sections = await waitForIndexedLambda<Section>({
     lambdaFunc,
     progressFunc,
     args,
@@ -60,14 +55,14 @@ const syncCases: (props: SyncProps) => Promise<TestCase[]> = async ({
     numIds: lambdaArgs.length,
   });
 
-  logger('Successfully fetched all test cases');
+  logger('Successfully fetched all sections');
 
-  logger('Saving test cases to Aha!');
-  await saveRecords<TestCase>(testCases);
-  await aha.account.setExtensionField(IDENTIFIER, 'lastCaseSync', now);
-  logger('Successfully saved all test cases');
+  logger('Saving sections to Aha!');
+  await saveRecords<Section>(sections);
+  await aha.account.setExtensionField(IDENTIFIER, 'lastSectionSync', now);
+  logger('Successfully saved all sections');
 
-  return testCases;
+  return sections;
 };
 
-export default syncCases;
+export default syncSections;

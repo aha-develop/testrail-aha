@@ -3,7 +3,6 @@ import { fetchTestRail, logResult, BaseParams } from '../lib/api';
 
 type TestPlanProps = BaseParams & {
   projectId: string;
-  createdAfter?: number;
 };
 
 type SyncActiveTestPlansProps = TestPlanProps & {
@@ -26,7 +25,6 @@ const syncActiveTestPlans: (props: SyncActiveTestPlansProps) => void = async ({
   eventKey,
   page,
   projectId,
-  createdAfter,
 }) => {
   console.log(
     `Beginning sync of active TestRail test plans for project: ${projectId} page: ${page}`
@@ -39,21 +37,13 @@ const syncActiveTestPlans: (props: SyncActiveTestPlansProps) => void = async ({
     eventKey,
     offset,
     projectId,
-    createdAfter,
     completed: 0,
   });
 };
 
 const syncCompletedTestPlans: (
   props: SyncCompletedTestPlansProps
-) => void = async ({
-  domain,
-  record,
-  eventKey,
-  limit,
-  projectId,
-  createdAfter,
-}) => {
+) => void = async ({ domain, record, eventKey, limit, projectId }) => {
   console.log(
     `Beginning sync of completed TestRail test plans for project: ${projectId}`
   );
@@ -64,7 +54,6 @@ const syncCompletedTestPlans: (
     eventKey,
     limit,
     projectId,
-    createdAfter,
     completed: 1,
   });
 };
@@ -75,7 +64,6 @@ const syncTestPlans: (props: SyncTestPlansProps) => void = async ({
   eventKey,
   offset,
   projectId,
-  createdAfter,
   completed,
   limit,
 }) => {
@@ -83,7 +71,6 @@ const syncTestPlans: (props: SyncTestPlansProps) => void = async ({
     const params = [`is_completed=${completed}`];
 
     if (offset) params.push(`offset=${offset}`);
-    if (createdAfter) params.push(`created_after=${createdAfter}`);
     if (limit) params.push(`limit=${limit}`);
 
     const path = `get_plans/${projectId}&${params.join('&')}`;
@@ -121,15 +108,7 @@ const syncTestPlans: (props: SyncTestPlansProps) => void = async ({
 
 aha.on(
   { event: `${IDENTIFIER}.syncPlans` },
-  async ({
-    domain,
-    eventKey,
-    page,
-    projectId,
-    createdAfter,
-    isCompleted,
-    limit,
-  }) => {
+  async ({ domain, eventKey, page, projectId, isCompleted, limit }) => {
     if (isCompleted === 1) {
       await syncCompletedTestPlans({
         record: aha.account,
@@ -145,7 +124,6 @@ aha.on(
         eventKey,
         projectId,
         page,
-        createdAfter,
       });
     }
   }

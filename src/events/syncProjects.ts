@@ -1,5 +1,6 @@
 import { IDENTIFIER, Project } from '../extension';
 import { fetchTestRail, logResult, BaseParams } from '../lib/api';
+import { truncate } from '../lib/util';
 
 type SyncProjectsProps = BaseParams & {
   page?: number;
@@ -25,8 +26,7 @@ export const syncProjects: (
     const projects = json.projects.map(project => ({
       id: project.id,
       kind: 'Project',
-      name: project.name,
-      suite_mode: project.suite_mode,
+      name: truncate(project.name),
     })) as Project[];
 
     const hasMore = json['_links']?.next !== null;

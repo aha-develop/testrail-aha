@@ -4,6 +4,7 @@ import { Styles } from './Styles';
 import StatusSection from './syncPageSections/StatusSection';
 import ProjectSection from './syncPageSections/ProjectSection';
 import SuiteSection from './syncPageSections/SuiteSection';
+import SectionSection from './syncPageSections/SectionSection';
 import TestCaseSection from './syncPageSections/TestCaseSection';
 import OpenTestRunSection from './syncPageSections/OpenTestRunSection';
 import CompletedTestRunSection from './syncPageSections/CompletedTestRunSection';
@@ -62,6 +63,12 @@ const SyncPage: React.FC<{ domain: string }> = ({ domain }) => {
           />
 
           <SuiteSection
+            domain={domain}
+            disabled={syncing}
+            setDisabled={setSyncing}
+          />
+
+          <SectionSection
             domain={domain}
             disabled={syncing}
             setDisabled={setSyncing}

@@ -4,8 +4,10 @@ import { TIMEOUT_MESSAGE, RETRY_WAIT, APIResult, PagedAPIResult } from '../api';
 import { sleep } from '../util';
 import { getAccountExtensionFieldMap } from '../extensionFields/queries';
 
-// The lambda can only run for up to 10 seconds, but can take a few minutes to spin up under heavy load.
+// The lambda can only run for up to 10 seconds, but can take some time to spin up on a cold start
+// and tends to take longer with more concurrency.
 const MAX_POLL_TIME = 5 * 60 * 1000;
+const INIT_WAIT_TIME = 3 * 1000;
 const INTERVAL_TIME = 1 * 1000;
 
 // The TestRail API does not return total number of pages so this is a tradeoff between speed,
@@ -44,7 +46,7 @@ type PagedWaitProps = WaitProps & {
   usePage?: boolean;
   isPaginated?: boolean;
   idKey?: string;
-  ids?: string[];
+  ids?: number[];
 };
 
 type MaybeMappedResult =
@@ -61,9 +63,10 @@ const waitForResults: (
   let error: string | null = null;
   let timedOut = false;
 
-  while (Date.now() - initialTime < MAX_POLL_TIME) {
-    await sleep(INTERVAL_TIME);
+  // Wait a little longer before first poll as the lambda has to spin up
+  await sleep(INIT_WAIT_TIME);
 
+  while (Date.now() - initialTime < MAX_POLL_TIME) {
     const results = await getAccountExtensionFieldMap<LambdaResult>(eventKeys);
 
     for (const eventKey in results) {
@@ -120,12 +123,14 @@ const waitForResults: (
 
       return arrayResults;
     }
+
+    await sleep(INTERVAL_TIME);
   }
 
   const errors = eventKeys.reduce((acc, key) => {
     acc[key] = {
       error: true,
-      message: 'Timeout waiting for lambda to complete',
+      message: 'Timeout waiting for lambda to complete - please try again',
     };
 
     return acc;

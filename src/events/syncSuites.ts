@@ -1,5 +1,6 @@
 import { IDENTIFIER, Suite } from '../extension';
 import { fetchTestRail, logResult, BaseParams } from '../lib/api';
+import { truncate } from '../lib/util';
 
 type SuiteProps = BaseParams & {
   projectId: string;
@@ -33,7 +34,7 @@ const syncSuites: (props: SuiteProps) => void = async ({
       suites.push({
         id: suite.id,
         kind: 'Suite',
-        name: suite.name,
+        name: truncate(suite.name),
         projectId: suite.project_id,
       });
     }

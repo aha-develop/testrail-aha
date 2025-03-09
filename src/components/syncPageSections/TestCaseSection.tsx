@@ -22,7 +22,7 @@ const resync: (props: ResyncProps) => Promise<void> = async ({
     setMessage('Fetching parent projects and suites for cases...');
 
     const projectIds =
-      (await aha.account.getExtensionField<string[]>(
+      (await aha.account.getExtensionField<number[]>(
         IDENTIFIER,
         'projectIds'
       )) ?? [];

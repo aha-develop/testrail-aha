@@ -2,6 +2,7 @@ import { IDENTIFIER } from '../../extension';
 import syncStatuses from './syncStatuses';
 import syncProjects from './syncProjects';
 import syncSuites from './syncSuites';
+import syncSections from './syncSections';
 import syncCases from './syncCases';
 import { syncCompletedPlans, syncOpenPlans } from './syncPlans';
 import { syncCompletedRuns, syncOpenRuns } from './syncRuns';
@@ -26,6 +27,7 @@ export enum SyncStage {
   Statuses,
   Projects,
   Suites,
+  Sections,
   TestCases,
   OpenRuns,
   CompletedRuns,
@@ -51,9 +53,9 @@ type SyncProps = {
 };
 
 type SyncResults = {
-  projectIds?: string[];
-  projectSuites?: { [projectId: string]: string[] };
-  runIds?: string[];
+  projectIds?: number[];
+  projectSuites?: { [projectId: string]: number[] };
+  runIds?: number[];
 };
 
 type BaseSyncStageProps = {
@@ -86,14 +88,14 @@ const getSyncState: () => Promise<BulkSyncState> = async () => {
 };
 
 const getSavedProjectSuites: (
-  projectIds: string[]
-) => Promise<{ [projectId: string]: string[] }> = async projectIds => {
+  projectIds: number[]
+) => Promise<{ [projectId: string]: number[] }> = async projectIds => {
   const keys = projectIds.map(projectId =>
     indexKeyForKindAndParent('Suite', projectId)
   );
 
   const projectSuites = {};
-  const suiteFields = await getAccountExtensionFieldMap<string[]>(keys);
+  const suiteFields = await getAccountExtensionFieldMap<number[]>(keys);
 
   for (const key in suiteFields) {
     const projectId = key.split('_')[1];
@@ -118,18 +120,20 @@ const progressForStage: (stage: SyncStage) => number = stage => {
       return 5;
     case SyncStage.Suites:
       return 10;
-    case SyncStage.TestCases:
+    case SyncStage.Sections:
       return 15;
+    case SyncStage.TestCases:
+      return 20;
     case SyncStage.OpenRuns:
-      return 25;
+      return 30;
     case SyncStage.CompletedRuns:
-      return 35;
-    case SyncStage.OpenPlans:
       return 40;
+    case SyncStage.OpenPlans:
+      return 45;
     case SyncStage.CompletedPlans:
-      return 50;
-    case SyncStage.Tests:
       return 55;
+    case SyncStage.Tests:
+      return 60;
     case SyncStage.Results:
       return 80;
   }
@@ -161,7 +165,7 @@ const bulkSync: (props: SyncProps) => Promise<void> = async ({
     const stage = SyncStage.TestCases;
     syncState = { ...syncState, stage, progress: progressForStage(stage) };
 
-    const projectIds = await aha.account.getExtensionField<string[]>(
+    const projectIds = await aha.account.getExtensionField<number[]>(
       IDENTIFIER,
       'projectIds'
     );
@@ -182,11 +186,6 @@ const bulkSync: (props: SyncProps) => Promise<void> = async ({
     updateState(state);
   };
 
-  // Because we're already calculating and storing the state, the caller
-  // doesn't need to wait on sync to finish.
-  setShouldWait(false);
-  await setSyncState(syncState);
-
   const failSync = () => {
     const newState = { ...syncState, state: SyncState.Errored };
     setSyncState(newState);
@@ -194,6 +193,11 @@ const bulkSync: (props: SyncProps) => Promise<void> = async ({
 
   // If this doesn't fire, we still have the max wait time as a fallback
   window.addEventListener('beforeunload', failSync);
+
+  // Because we're already calculating and storing the state, the caller
+  // doesn't need to wait on sync to finish.
+  setShouldWait(false);
+  await setSyncState(syncState);
 
   try {
     if (syncState.stage === SyncStage.Statuses) {
@@ -275,6 +279,22 @@ const syncInitialRecords: (
 
       projectSuites[suite.projectId].push(suite.id);
     });
+
+    newSyncState = {
+      ...syncState,
+      progress: progressForStage(SyncStage.Sections),
+      stage: SyncStage.Sections,
+    };
+
+    await setSyncState(newSyncState);
+
+    const sectionParams = {
+      domain,
+      logger,
+      projectSuites,
+    };
+
+    await syncSections(sectionParams);
 
     newSyncState = {
       ...syncState,
@@ -401,7 +421,6 @@ const syncRequiresRuns: (
     const testParams = {
       domain,
       logger,
-      lastTestSync: lastSync,
       runIds: results.runIds,
     };
 

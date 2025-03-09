@@ -1,5 +1,6 @@
 import { IDENTIFIER, TestRun } from '../extension';
 import { fetchTestRail, logResult, BaseParams } from '../lib/api';
+import { truncate } from '../lib/util';
 
 type RunsForPlanProps = BaseParams & {
   planId: string;
@@ -34,7 +35,8 @@ const syncTestRunsForPlan: (props: RunsForPlanProps) => void = async ({
           kind: 'TestRun',
           projectId: run.project_id,
           suiteId: run.suite_id,
-          name: run.name,
+          name: truncate(run.name),
+          createdOn: run.created_on,
         });
       }
     }
