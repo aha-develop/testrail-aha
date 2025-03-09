@@ -4,7 +4,7 @@ import {
   waitForPagedLambda,
   waitForIndexedLambda,
 } from './interface';
-import { saveRecords, saveNewRecords } from '../extensionFields/updates';
+import { saveRecords, saveNewRuns } from '../extensionFields/updates';
 
 // We don't want to fetch more than a page of completed runs per project, to avoid loading up on historic data.
 const NUM_COMPLETED_RUNS = 250;
@@ -98,7 +98,7 @@ export const syncCompletedRuns: (
 
   logger('Saving completed test runs to Aha!');
 
-  const newRuns = await saveNewRecords<TestRun>(completedRuns);
+  const newRuns = await saveNewRuns(completedRuns);
 
   await aha.account.setExtensionField(IDENTIFIER, 'lastCompletedRunSync', now);
   logger('Successfully saved all completed test runs');

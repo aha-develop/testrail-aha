@@ -18,11 +18,12 @@
           "recordTypes": [
             "Feature",
             "Requirement",
-            "Epic"
+            "Epic",
+            "Iteration"
           ]
         },
         "syncing": {
-          "title": "TestRail Syncing",
+          "title": "TestRail Connection",
           "entryPoint": "src/views/syncing.tsx",
           "host": "page",
           "location": {

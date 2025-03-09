@@ -33,6 +33,10 @@ export const Styles = () => {
           font-weight: 600;
         }
 
+        .has-pointer {
+          cursor: pointer;
+        }
+
         .tab-header {
           display: flex;
           justify-content: space-between;
@@ -271,6 +275,50 @@ export const Styles = () => {
 
         .left-align-input {
           --aha-field--label-width: inherit;
+        }
+
+        .run-rows {
+          display: flex;
+          flex-direction: column;
+          gap: var(--spacer-3);
+        }
+
+        .run-row {
+          border: var(--Common--border);
+          padding: var(--spacer-4) var(--spacer-3);
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        }
+
+        .run-row-column {
+          display: flex;
+          align-items: center;
+          gap: var(--spacer-2);
+        }
+
+        .run-rows .test-row {
+          background-color: var(--theme-secondary-background);
+        }
+
+        .run-title {
+          font-weight: 500;
+          font-size: var(--font-size-100);
+        }
+
+        .run-stat-row {
+          display: flex;
+          gap: var(--spacer-2);
+        }
+
+        .status-count {
+          display: flex;
+          gap: var(--spacer);
+        }
+
+        .test-status {
+          min-width: 62px;
+          text-align: center;
         }
       `}
     </style>

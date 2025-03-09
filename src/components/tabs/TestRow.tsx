@@ -14,7 +14,8 @@ type RowProps = {
   status?: Status;
   domain: string;
   record: ExtensionRecord;
-  syncData: BulkSyncState;
+  syncData?: BulkSyncState;
+  canDelete?: boolean;
 };
 
 const TestRow: React.FC<RowProps> = ({
@@ -25,6 +26,7 @@ const TestRow: React.FC<RowProps> = ({
   domain,
   record,
   syncData,
+  canDelete = true,
 }) => {
   const [linkTestModalOpen, setLinkTestModalOpen] = useState(false);
 
@@ -54,7 +56,10 @@ const TestRow: React.FC<RowProps> = ({
             )}
             <RecordLink record={test} domain={domain} />
             {status && (
-              <aha-pill color={numberToColor(status.colorMedium)}>
+              <aha-pill
+                class='test-status'
+                color={numberToColor(status.colorMedium)}
+              >
                 {status.label}
               </aha-pill>
             )}
@@ -79,9 +84,11 @@ const TestRow: React.FC<RowProps> = ({
             )}
           </>
         )}
-        <aha-button size='mini' kind='icon' onClick={unlink}>
-          <aha-icon icon='fa-regular fa-trash-can' />
-        </aha-button>
+        {canDelete && (
+          <aha-button size='mini' kind='icon' onClick={unlink}>
+            <aha-icon icon='fa-regular fa-trash-can' />
+          </aha-button>
+        )}
       </div>
     </div>
   );

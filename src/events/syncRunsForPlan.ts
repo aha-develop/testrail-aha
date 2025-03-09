@@ -37,6 +37,7 @@ const syncTestRunsForPlan: (props: RunsForPlanProps) => void = async ({
           suiteId: run.suite_id,
           name: truncate(run.name),
           createdOn: run.created_on,
+          completed: run.is_completed,
         });
       }
     }
