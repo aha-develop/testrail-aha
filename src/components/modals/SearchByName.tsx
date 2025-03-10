@@ -7,6 +7,7 @@ export type TreeNode = {
   text: string;
   date?: number;
   children?: TreeNode[];
+  header?: boolean;
 };
 
 type CommonProps = {
@@ -52,7 +53,8 @@ const ResultSection: React.FC<SectionProps> = ({
 
     return (
       node.children?.some(child => matchesQuery(child)) ||
-      queryText.toLowerCase().includes(query.trim().toLowerCase())
+      (!node.header &&
+        queryText.toLowerCase().includes(query.trim().toLowerCase()))
     );
   };
 
@@ -66,46 +68,51 @@ const ResultSection: React.FC<SectionProps> = ({
 
   return (
     <>
-      {nesting === 0 && (
+      {(nesting === 0 || tree.header) && (
         <div key={key} className='search-row' style={style}>
           <div className='search-header'>{tree.text}</div>
         </div>
       )}
       {filtered.map(node => (
         <>
-          <div
-            key={node.value}
-            className={`search-row${
-              selected.includes(node.value) ? ' selected' : ''
-            }`}
-            style={style}
-            onClick={onSelectBuilder(node.value)}
-          >
-            <div className='search-result'>
-              <div className='search-column'>
-                {selected.includes(node.value) ? (
-                  <aha-icon class='search-selected' icon='fa-solid fa-check' />
-                ) : (
-                  <aha-icon icon='fa-regular fa-square' />
-                )}
-
-                <div className='search-text'>
-                  {showReference && (
-                    <div className='text-light text-gray'>{`${referencePrefix}${node.value}`}</div>
+          {!node.header && (
+            <div
+              key={node.value}
+              className={`search-row${
+                selected.includes(node.value) ? ' selected' : ''
+              }`}
+              style={style}
+              onClick={onSelectBuilder(node.value)}
+            >
+              <div className='search-result'>
+                <div className='search-column'>
+                  {selected.includes(node.value) ? (
+                    <aha-icon
+                      class='search-selected'
+                      icon='fa-solid fa-check'
+                    />
+                  ) : (
+                    <aha-icon icon='fa-regular fa-square' />
                   )}
 
-                  <div className={node.children ? 'search-sub-header' : null}>
-                    {node.text}
+                  <div className='search-text'>
+                    {showReference && (
+                      <div className='text-light text-gray'>{`${referencePrefix}${node.value}`}</div>
+                    )}
+
+                    <div className={node.children ? 'search-sub-header' : null}>
+                      {node.text}
+                    </div>
                   </div>
                 </div>
+                {node.date && (
+                  <div className='text-light text-gray'>
+                    {formatTime(node.date)}
+                  </div>
+                )}
               </div>
-              {node.date && (
-                <div className='text-light text-gray'>
-                  {formatTime(node.date)}
-                </div>
-              )}
             </div>
-          </div>
+          )}
           {node.children && (
             <ResultSection
               tree={node}

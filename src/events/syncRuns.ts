@@ -92,6 +92,7 @@ const syncTestRuns: (props: SyncTestRunsProps) => void = async ({
       suiteId: testRun.suite_id,
       name: truncate(testRun.name),
       createdOn: testRun.created_on,
+      completed: completed === 1,
     })) as TestRun[];
 
     const hasMore = json['_links']?.next !== null;

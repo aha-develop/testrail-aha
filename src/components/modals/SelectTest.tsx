@@ -83,7 +83,7 @@ const SelectTest: React.FC<Props> = ({
 
     // Load on first render, if caseId changes, or if new tests potentially synced
     const shouldLoad =
-      caseId && (loading || caseIdChanged || (!lastState && currentState));
+      caseId && (loading || caseIdChanged || (lastState && !currentState));
 
     if (caseId && caseIdChanged) {
       setLoading(true);

@@ -137,61 +137,34 @@ export const getRecords: <T extends TestRailRecord>(
   return result.sort((a, b) => b.id - a.id); // Sort by ID descending
 };
 
-export async function getProjectSections(
-  projectIds: number[] | undefined
-): Promise<{
-  [projectId: number]: Section[];
-}> {
+export const getProjectRecords: <T extends TestRun | TestCase | Section>(
+  projectIds: number[] | undefined,
+  kind: TestRailRecord['kind']
+) => Promise<{
+  [projectId: number]: T[];
+}> = async <T extends TestRun | TestCase | Section>(projectIds, kind) => {
   if (!projectIds || projectIds.length === 0) return {};
 
-  const mapping: { [projectId: number]: Section[] } = {};
+  const mapping: { [projectId: number]: T[] } = {};
 
   const keys = projectIds.map(projectId =>
-    indexKeyForKindAndParent('Section', projectId)
+    indexKeyForKindAndParent(kind, projectId)
   );
 
-  const sectionIds = (await getAccountExtensionFields<number[]>(keys)).flat();
+  const ids = (await getAccountExtensionFields<number[]>(keys)).flat();
 
-  const sections = await getRecords<Section>(sectionIds, 'Section');
+  const records = await getRecords<T>(ids, kind);
 
-  for (const section of sections) {
-    if (!mapping[section.projectId]) {
-      mapping[section.projectId] = [];
+  for (const record of records) {
+    if (!mapping[record.projectId]) {
+      mapping[record.projectId] = [];
     }
 
-    mapping[section.projectId].push(section);
+    mapping[record.projectId].push(record);
   }
 
   return mapping;
-}
-
-export async function getProjectTestCases(
-  projectIds: number[] | undefined
-): Promise<{
-  [projectId: number]: TestCase[];
-}> {
-  if (!projectIds || projectIds.length === 0) return {};
-
-  const mapping: { [projectId: number]: TestCase[] } = {};
-
-  const keys = projectIds.map(projectId =>
-    indexKeyForKindAndParent('TestCase', projectId)
-  );
-
-  const caseIds = (await getAccountExtensionFields<number[]>(keys)).flat();
-
-  const cases = await getRecords<TestCase>(caseIds, 'TestCase');
-
-  for (const testCase of cases) {
-    if (!mapping[testCase.projectId]) {
-      mapping[testCase.projectId] = [];
-    }
-
-    mapping[testCase.projectId].push(testCase);
-  }
-
-  return mapping;
-}
+};
 
 export async function getLinkedComments(
   tests: Test[]
@@ -263,3 +236,42 @@ export async function getAllRunIds(): Promise<number[]> {
 
   return runs.map(run => run.id);
 }
+
+export const getRunRowData: (
+  runIds: undefined | number[]
+) => Promise<
+  [{ [runId: number]: [TestCase, Test][] }, Test[]]
+> = async runIds => {
+  if (!runIds) return [{}, []];
+
+  const testKeys = runIds.map(runId => indexKeyForKindAndParent('Test', runId));
+  const testIds = (await getAccountExtensionFields<number[]>(testKeys)).flat();
+  const tests = await getRecords<Test>(testIds, 'Test');
+
+  const caseKeys = tests.map(test => fieldName('TestCase', test.caseId));
+  const testCases = await getAccountExtensionFields<TestCase>(caseKeys);
+
+  const testCaseMap = testCases.reduce((acc, testCase) => {
+    acc[testCase.id] = testCase;
+    return acc;
+  }, {});
+
+  const testMap = tests.reduce(
+    (acc: { [runId: number]: [TestCase, Test][] }, test) => {
+      if (!acc[test.runId]) {
+        acc[test.runId] = [];
+      }
+
+      const testCase = testCaseMap[test.caseId];
+
+      if (!testCase) return acc;
+
+      acc[test.runId].push([testCase, test]);
+
+      return acc;
+    },
+    {}
+  );
+
+  return [testMap, tests];
+};

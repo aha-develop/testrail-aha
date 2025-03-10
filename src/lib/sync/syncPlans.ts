@@ -4,7 +4,7 @@ import {
   waitForPagedLambda,
   waitForIndexedLambda,
 } from './interface';
-import { saveRecords, saveNewRecords } from '../extensionFields/updates';
+import { saveRecords, saveNewRuns } from '../extensionFields/updates';
 
 // We don't want to fetch more than a page of completed plans, to avoid loading up on historic data.
 const NUM_COMPLETED_PLANS = 250;
@@ -149,7 +149,7 @@ const syncRunsForPlan: (props: SyncRunProps) => Promise<TestRun[]> = async ({
 
   // When syncing completed plans, only save new records to reduce syncing effort.
   if (completed) {
-    runs = await saveNewRecords<TestRun>(runs);
+    runs = await saveNewRuns(runs);
   } else {
     await saveRecords<TestRun>(runs);
   }

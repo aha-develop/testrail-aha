@@ -83,18 +83,20 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
       const tabData = await getFeatureTabData(caseIds, testIds);
 
       setTabData(tabData);
-      waitForBulkSync({
-        domain,
-        syncDelay,
-        setState: setSyncData,
-        reload: reloadTabData,
-      });
-
       setLoading(false);
     }
 
     initData();
   }, [caseIds, testIds, reload]);
+
+  useEffect(() => {
+    waitForBulkSync({
+      domain,
+      syncDelay,
+      setState: setSyncData,
+      reload: reloadTabData,
+    });
+  }, []);
 
   let caseRows = null;
 
@@ -102,7 +104,7 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
     testCases: [],
     tests: {},
     comments: {},
-    statuses: [],
+    statuses: {},
   };
 
   if (caseIds) {
@@ -171,6 +173,7 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
         {linkCaseModalOpen && (
           <LinkTestCase
             record={record}
+            caseIds={caseIds}
             syncData={syncData}
             onClose={onClose(setLinkCaseModalOpen)}
           />
@@ -178,6 +181,7 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
         {linkTestModalOpen && (
           <LinkTest
             record={record}
+            caseIds={caseIds}
             syncData={syncData}
             onClose={onClose(setLinkTestModalOpen)}
           />

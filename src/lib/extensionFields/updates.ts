@@ -1,4 +1,9 @@
-import { IDENTIFIER, TestRailRecord, TestResult } from '../../extension';
+import {
+  IDENTIFIER,
+  TestRailRecord,
+  TestRun,
+  TestResult,
+} from '../../extension';
 import { ExtensionRecord } from '../extensionRecord';
 import {
   fieldName,
@@ -54,23 +59,24 @@ export const saveRecords: <T extends TestRailRecord>(
   await updateRecordIndexes(records);
 };
 
-export const saveNewRecords: <T extends TestRailRecord>(
-  records: T[]
-) => Promise<T[]> = async <T extends TestRailRecord>(records) => {
+export const saveNewRuns: (
+  records: TestRun[]
+) => Promise<TestRun[]> = async records => {
   if (records.length === 0) return [];
 
   const newRecords = [];
 
   const keys = records.map(record => fieldName(record.kind, record.id));
-  const map = await getAccountExtensionFieldMap<T>(keys);
+  const map = await getAccountExtensionFieldMap<TestRun>(keys);
 
+  // Once a run is completed it no longer changes and can be ignored
   for (const record of records) {
-    if (map[fieldName(record.kind, record.id)]) continue;
+    if (map[fieldName(record.kind, record.id)]?.completed) continue;
 
     newRecords.push(record);
   }
 
-  await saveRecords<T>(newRecords);
+  await saveRecords<TestRun>(newRecords);
 
   return newRecords;
 };

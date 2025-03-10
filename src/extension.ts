@@ -47,6 +47,7 @@ export type TestRun = {
   suiteId: number;
   name: string;
   createdOn: number;
+  completed: boolean;
 };
 
 export type Test = {

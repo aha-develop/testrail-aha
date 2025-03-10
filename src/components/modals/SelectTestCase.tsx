@@ -4,15 +4,15 @@ import SyncProgress from '../SyncProgress';
 import { IDENTIFIER, Project, TestCase } from '../../extension';
 import {
   getRecords,
-  getProjectTestCases,
+  getProjectRecords,
 } from '../../lib/extensionFields/queries';
 import { ExtensionRecord } from '../../lib/extensionRecord';
 import { BulkSyncState, SyncStage, SyncState } from '../../lib/sync/bulkSync';
 
 type Props = {
-  record: ExtensionRecord;
   syncData: BulkSyncState;
   caseId: string;
+  caseIds: number[];
   setCaseId: (caseId: string) => Promise<void>;
 };
 
@@ -57,9 +57,9 @@ const caseOptions: (
 };
 
 const SelectTestCase: React.FC<Props> = ({
-  record,
   syncData,
   caseId,
+  caseIds,
   setCaseId,
 }) => {
   const [loading, setLoading] = useState(true);
@@ -75,13 +75,8 @@ const SelectTestCase: React.FC<Props> = ({
         'projectIds'
       );
 
-      const caseIds = await record.getExtensionField<number[]>(
-        IDENTIFIER,
-        'caseIds'
-      );
-
       const [caseMapping, projects] = await Promise.all([
-        getProjectTestCases(projectIds),
+        getProjectRecords<TestCase>(projectIds, 'TestCase'),
         getRecords<Project>(projectIds, 'Project'),
       ]);
 
@@ -102,7 +97,7 @@ const SelectTestCase: React.FC<Props> = ({
     }
 
     // Fetch data on first load or if new cases potentially synced
-    if (loading || (!lastState && currentState)) fetchCases();
+    if (loading || (lastState && !currentState)) fetchCases();
   }, [syncData]);
 
   return (

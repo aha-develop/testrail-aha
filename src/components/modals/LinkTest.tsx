@@ -7,11 +7,12 @@ import { linkRecord } from '../../lib/extensionFields/updates';
 
 type Props = {
   record: ExtensionRecord;
+  caseIds: number[];
   syncData: BulkSyncState;
   onClose: () => void;
 };
 
-const LinkTest: React.FC<Props> = ({ record, syncData, onClose }) => {
+const LinkTest: React.FC<Props> = ({ record, caseIds, syncData, onClose }) => {
   const modalRef = useRef(null);
   const [saving, setSaving] = useState(false);
 
@@ -61,9 +62,9 @@ const LinkTest: React.FC<Props> = ({ record, syncData, onClose }) => {
         )}
         <div style={{ display: caseStep ? 'block' : 'none' }}>
           <SelectTestCase
-            record={record}
             syncData={syncData}
             caseId={caseId}
+            caseIds={caseIds}
             setCaseId={async (value: string) => setCaseId(value)}
           />
         </div>

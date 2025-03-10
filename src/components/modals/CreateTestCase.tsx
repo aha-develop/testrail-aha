@@ -4,7 +4,7 @@ import { ExtensionRecord } from '../../lib/extensionRecord';
 import SearchByName, { TreeNode } from './SearchByName';
 import {
   getRecords,
-  getProjectSections,
+  getProjectRecords,
 } from '../../lib/extensionFields/queries';
 import { waitForLambda } from '../../lib/sync/interface';
 import { APIResult } from '../../lib/api';
@@ -210,7 +210,7 @@ const CreateTestCase: React.FC<Props> = ({
       );
 
       const [sectionMapping, projects] = await Promise.all([
-        getProjectSections(projectIds),
+        getProjectRecords<Section>(projectIds, 'Section'),
         getRecords<Project>(projectIds, 'Project'),
       ]);
 
@@ -230,7 +230,7 @@ const CreateTestCase: React.FC<Props> = ({
       setSyncingSections(currentState);
     }
 
-    if (loading || (!lastState && currentState)) fetchSections();
+    if (loading || (lastState && !currentState)) fetchSections();
   }, [syncData]);
 
   useEffect(() => {
