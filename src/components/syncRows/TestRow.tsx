@@ -1,54 +1,43 @@
 import React from 'react';
 import syncTests from '../../lib/sync/syncTests';
 import { getAllRunIds } from '../../lib/extensionFields/queries';
-import BaseSection, { SectionProps, ResyncProps } from './BaseSection';
+import BaseSyncRow, { RowProps, ResyncProps } from './BaseSyncRow';
+import { showError } from '../../lib/util';
 
 const resync: (props: ResyncProps) => Promise<void> = async ({
   domain,
-  setLoading,
   setSyncing,
   setLastSync,
-  setMessage,
-  setError,
 }) => {
   try {
     setSyncing(true);
-    setLoading(true);
-    setMessage('Fetching test runs for tests...');
 
     const runIds = await getAllRunIds();
     const now = Date.now();
 
     await syncTests({
       domain,
-      logger: setMessage,
       runIds,
     });
     await setLastSync(now);
   } catch (error) {
-    setMessage(null);
-    setError(error.message);
+    showError(error.message);
   } finally {
-    setLoading(false);
     setSyncing(false);
   }
 };
 
-const TestSection: React.FC<SectionProps> = ({
-  domain,
-  disabled,
-  setDisabled,
-}) => {
+const TestRow: React.FC<RowProps> = ({ domain, disabled }) => {
   return (
-    <BaseSection
-      title='Sync tests'
+    <BaseSyncRow
+      recordType='Tests'
       resync={resync}
       domain={domain}
       disabled={disabled}
-      setDisabled={setDisabled}
-      syncKey={'lastTestSync'}
+      syncKey='syncingTests'
+      lastSyncKey={'lastTestSync'}
     />
   );
 };
 
-export default TestSection;
+export default TestRow;

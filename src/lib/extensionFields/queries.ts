@@ -1,6 +1,7 @@
 import {
   IDENTIFIER,
   Section,
+  Suite,
   TestCase,
   TestRun,
   Test,
@@ -8,8 +9,7 @@ import {
   TestResult,
 } from '../../extension';
 
-// Guard against overloading the GQL by fetching thousands of records at once.
-const GQL_BATCH_SIZE = 500;
+import queryExtensionFields from './queryExtensionFields';
 
 export const fieldName: (kind: TestRailRecord['kind'], id: number) => string = (
   kind,
@@ -78,31 +78,6 @@ export const indexKeyForKindAndParent: (
   }
 };
 
-const queryExtensionFields: (
-  names: string[]
-) => Promise<Aha.ExtensionField[]> = async (names: string[]) => {
-  const results: Aha.ExtensionField[] = [];
-
-  for (let i = 0; i < names.length; i += GQL_BATCH_SIZE) {
-    const chunk = names.slice(i, i + GQL_BATCH_SIZE);
-
-    const result = await aha.models.Account.select('id')
-      .merge({
-        extensionFields: aha.models.ExtensionField.select(
-          'name',
-          'value'
-        ).where({
-          name: chunk,
-        }),
-      })
-      .find(aha.account.id);
-
-    results.push(...result.extensionFields);
-  }
-
-  return results;
-};
-
 export const getAccountExtensionFieldMap: <T>(
   names: string[]
 ) => Promise<{ [key: string]: T }> = async names => {
@@ -137,12 +112,17 @@ export const getRecords: <T extends TestRailRecord>(
   return result.sort((a, b) => b.id - a.id); // Sort by ID descending
 };
 
-export const getProjectRecords: <T extends TestRun | TestCase | Section>(
+export const getProjectRecords: <
+  T extends TestRun | TestCase | Suite | Section
+>(
   projectIds: number[] | undefined,
   kind: TestRailRecord['kind']
 ) => Promise<{
   [projectId: number]: T[];
-}> = async <T extends TestRun | TestCase | Section>(projectIds, kind) => {
+}> = async <T extends TestRun | TestCase | Suite | Section>(
+  projectIds,
+  kind
+) => {
   if (!projectIds || projectIds.length === 0) return {};
 
   const mapping: { [projectId: number]: T[] } = {};
@@ -166,9 +146,34 @@ export const getProjectRecords: <T extends TestRun | TestCase | Section>(
   return mapping;
 };
 
-export async function getLinkedComments(
-  tests: Test[]
-): Promise<{ [testId: number]: { comment: string; timestamp: number } }> {
+export const getProjectSuiteMapping: (
+  projectIds: number[] | undefined
+) => Promise<{ [projectId: number]: number[] }> = async projectIds => {
+  if (!projectIds || projectIds.length === 0) return {};
+
+  const keys = projectIds.map(projectId =>
+    indexKeyForKindAndParent('Suite', projectId)
+  );
+
+  const projectSuites = {};
+  const suiteFields = await getAccountExtensionFieldMap<number[]>(keys);
+
+  for (const key in suiteFields) {
+    const projectId = key.split('_')[1];
+
+    if (!projectSuites[projectId]) {
+      projectSuites[projectId] = [];
+    }
+
+    projectSuites[projectId].push(...suiteFields[key]);
+  }
+
+  return projectSuites;
+};
+
+export const getLinkedComments: (tests: Test[]) => Promise<{
+  [testId: number]: { comment: string; timestamp: number };
+}> = async tests => {
   const commentKey = test => `${fieldName('Test', test.id)}_comment`;
 
   const keys = tests.map(test => commentKey(test));
@@ -185,7 +190,7 @@ export async function getLinkedComments(
     }),
     {}
   );
-}
+};
 
 export const getRunMapForTestCase: (
   testCase: TestCase
@@ -219,7 +224,9 @@ export const getRunMapForTestCase: (
   return result;
 };
 
-export async function getAllRunIds(): Promise<number[]> {
+// Used when individual syncing tests and results - note that this is potentially less
+// performant than even bulk sync, depending on the number of saved completed runs.
+export const getAllRunIds: () => Promise<number[]> = async () => {
   const projectIds = await aha.account.getExtensionField<number[]>(
     IDENTIFIER,
     'projectIds'
@@ -232,10 +239,9 @@ export async function getAllRunIds(): Promise<number[]> {
   );
 
   const runIds = (await getAccountExtensionFields<number[]>(keys)).flat();
-  const runs = await getRecords<TestRun>(runIds, 'TestRun');
 
-  return runs.map(run => run.id);
-}
+  return runIds;
+};
 
 export const getRunRowData: (
   runIds: undefined | number[]

@@ -281,7 +281,7 @@ const CreateTestCase: React.FC<Props> = ({
             showReference={false}
             loading={loading}
             label='Select a section'
-            placeholder={'No synced sections found.'}
+            placeholder='No synced sections found.'
           >
             {syncing && <SyncProgress syncData={syncData} />}
           </SearchByName>

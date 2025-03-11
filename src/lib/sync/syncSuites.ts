@@ -8,14 +8,11 @@ type SyncProps = BaseSyncProps & {
 
 const syncSuites: (props: SyncProps) => Promise<Suite[]> = async ({
   domain,
-  logger,
   projectIds,
 }) => {
   if (!projectIds?.length) {
     throw new Error('No synced projects found, aborting suite sync.');
   }
-
-  logger('Beginning load of suites from TestRail');
 
   const now = Date.now();
   const eventKey = `syncSuites-${now}`;
@@ -24,15 +21,8 @@ const syncSuites: (props: SyncProps) => Promise<Suite[]> = async ({
     await aha.triggerServer(`${IDENTIFIER}.syncSuites`, args);
   };
 
-  const progressFunc = async (firstPage, lastPage) => {
-    logger(
-      `Fetching suites, pages ${firstPage} to ${lastPage} of ${projectIds.length}...`
-    );
-  };
-
   const suites = await waitForPagedLambda<Suite>({
     lambdaFunc,
-    progressFunc,
     args: { domain },
     eventKey,
     usePage: false,
@@ -41,12 +31,8 @@ const syncSuites: (props: SyncProps) => Promise<Suite[]> = async ({
     ids: projectIds,
   });
 
-  logger('Successfully fetched all suites');
-
-  logger('Saving suites to Aha!');
   await saveRecords<Suite>(suites);
   await aha.account.setExtensionField(IDENTIFIER, 'lastSuiteSync', now);
-  logger('Successfully saved all suites');
 
   return suites;
 };

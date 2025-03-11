@@ -1,4 +1,4 @@
-export const IDENTIFIER = 'aha-develop.testrail-aha';
+export const IDENTIFIER = 'aha-develop.testrail';
 
 export type TestRailRecord =
   | Project

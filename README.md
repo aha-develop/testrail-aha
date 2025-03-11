@@ -1,4 +1,4 @@
-# aha-develop.testrail-aha
+# aha-develop.testrail
 
 TODO: Supply a short overview of the functionality the extension brings to Aha! Develop
 This [Aha! Develop](https://www.aha.io/develop/overview) extension enables...

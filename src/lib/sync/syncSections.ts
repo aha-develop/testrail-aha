@@ -11,13 +11,10 @@ type SyncProps = BaseSyncProps & {
 const syncSections: (props: SyncProps) => Promise<Section[]> = async ({
   domain,
   projectSuites,
-  logger,
 }) => {
   if (Object.keys(projectSuites).length === 0) {
     throw new Error('No synced projects found, aborting section sync.');
   }
-
-  logger('Beginning load of sections from TestRail');
 
   const now = Date.now();
 
@@ -41,26 +38,17 @@ const syncSections: (props: SyncProps) => Promise<Section[]> = async ({
     await aha.triggerServer(`${IDENTIFIER}.syncSections`, args);
   };
 
-  const progressFunc = async (firstPage, lastPage) => {
-    logger(`Fetching sections, pages ${firstPage} to ${lastPage}...`);
-  };
-
   const argFunc = (index: number) => lambdaArgs[index];
   const sections = await waitForIndexedLambda<Section>({
     lambdaFunc,
-    progressFunc,
     args,
     eventKey,
     argFunc,
     numIds: lambdaArgs.length,
   });
 
-  logger('Successfully fetched all sections');
-
-  logger('Saving sections to Aha!');
   await saveRecords<Section>(sections);
   await aha.account.setExtensionField(IDENTIFIER, 'lastSectionSync', now);
-  logger('Successfully saved all sections');
 
   return sections;
 };

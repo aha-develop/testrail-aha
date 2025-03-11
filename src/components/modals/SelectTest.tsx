@@ -81,7 +81,7 @@ const SelectTest: React.FC<Props> = ({
       setSyncingTests(currentState);
     }
 
-    // Load on first render, if caseId changes, or if new tests potentially synced
+    // Load on first render if caseId changes, or if new tests potentially synced
     const shouldLoad =
       caseId && (loading || caseIdChanged || (lastState && !currentState));
 
@@ -102,7 +102,7 @@ const SelectTest: React.FC<Props> = ({
         referencePrefix='T'
         loading={loading}
         label='Select a test'
-        placeholder={'No tests found for this test case.'}
+        placeholder='No tests found for this test case.'
       >
         {syncing && <SyncProgress syncData={syncData} />}
       </SearchByName>

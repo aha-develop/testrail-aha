@@ -27,10 +27,10 @@ type FeatureTabData = {
   statuses: { [key: string]: Status };
 };
 
-export async function getFeatureTabData(
+const getFeatureTabData: (
   caseIds: number[],
   testIds: number[]
-): Promise<FeatureTabData> {
+) => Promise<FeatureTabData> = async (caseIds, testIds) => {
   const testCases = await getRecords<TestCase>(caseIds, 'TestCase');
   const tests = await getRecords<Test>(testIds, 'Test');
 
@@ -54,7 +54,7 @@ export async function getFeatureTabData(
     comments: commentMap,
     statuses: statusMap,
   };
-}
+};
 
 const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   const caseIds = fields['caseIds'] as number[] | undefined;
@@ -79,12 +79,12 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   const syncDelay = settings.get('syncDelay') as number | undefined;
 
   useEffect(() => {
-    async function initData() {
+    const initData = async () => {
       const tabData = await getFeatureTabData(caseIds, testIds);
 
       setTabData(tabData);
       setLoading(false);
-    }
+    };
 
     initData();
   }, [caseIds, testIds, reload]);

@@ -17,14 +17,14 @@ const INTERVAL_TIME = 1 * 1000;
 const INITIAL_CONCURRENCY = 1;
 const PAGED_CONCURRENCY = 5;
 
-// For fetching child records in parallel - can fetch more because no risk of wasted effort
-const ID_CONCURRENCY = 30;
+// Max number of concurrent requests to the lambda - should be kept low to
+// avoid getting throttled by AWS.
+const MAX_CONCURRENCY = 50;
 
 export type LambdaResult = APIResult | PagedAPIResult;
 
 export type BaseSyncProps = {
   domain: string;
-  logger: (message: string) => void;
 };
 
 type WaitProps = {
@@ -36,13 +36,11 @@ type WaitProps = {
 };
 
 type IndexedWaitProps = WaitProps & {
-  progressFunc: (firstPage: number, lastPage: number) => Promise<void>;
   argFunc: (index: number) => { [key: string]: any };
   numIds: number;
 };
 
 type PagedWaitProps = WaitProps & {
-  progressFunc: (firstPage: number, lastPage: number) => Promise<void>;
   usePage?: boolean;
   isPaginated?: boolean;
   idKey?: string;
@@ -178,7 +176,6 @@ export const waitForPagedLambda: <T>(
   props: PagedWaitProps
 ) => Promise<T[]> = async <T>({
   eventKey,
-  progressFunc,
   lambdaFunc,
   args,
   usePage = true,
@@ -192,7 +189,7 @@ export const waitForPagedLambda: <T>(
   let eventKeys = [];
   let argsForKeys = {};
 
-  let concurrency = usePage ? INITIAL_CONCURRENCY : ID_CONCURRENCY;
+  let concurrency = usePage ? INITIAL_CONCURRENCY : MAX_CONCURRENCY;
 
   for (let i = 0; i < concurrency && (!ids || page <= ids.length); i++) {
     const lambdaArgs = { ...args };
@@ -214,8 +211,6 @@ export const waitForPagedLambda: <T>(
 
     page++;
   }
-
-  progressFunc(1, page - 1);
 
   let fetchResults = (await waitForResults(eventKeys)) as null | LambdaResult[];
 
@@ -249,10 +244,9 @@ export const waitForPagedLambda: <T>(
     );
   }
 
-  concurrency = usePage ? PAGED_CONCURRENCY : ID_CONCURRENCY;
+  concurrency = usePage ? PAGED_CONCURRENCY : MAX_CONCURRENCY;
 
   while (hasMore && !error) {
-    let oldPage = page;
     eventKeys = [];
 
     for (let i = 0; i < concurrency && (!ids || page <= ids.length); i++) {
@@ -275,8 +269,6 @@ export const waitForPagedLambda: <T>(
 
       page++;
     }
-
-    progressFunc(oldPage, page - 1);
 
     fetchResults = (await waitForResults(eventKeys)) as null | LambdaResult[];
 
@@ -321,7 +313,6 @@ export const waitForIndexedLambda: <T>(
   props: IndexedWaitProps
 ) => Promise<T[]> = async <T>({
   eventKey,
-  progressFunc,
   lambdaFunc,
   args,
   argFunc,
@@ -342,8 +333,7 @@ export const waitForIndexedLambda: <T>(
     for (let index = 0; index < numIds; index++) {
       const indexString = index.toString();
 
-      if (eventKeys.length >= ID_CONCURRENCY) {
-        progressFunc(fetchedPages, fetchedPages + (eventKeys.length - 1));
+      if (eventKeys.length >= MAX_CONCURRENCY) {
         fetchedPages += eventKeys.length;
 
         let fetchResults = (await waitForResults(eventKeys, true)) as null | {
@@ -388,7 +378,7 @@ export const waitForIndexedLambda: <T>(
 
       if (finishedIds.has(indexString)) continue;
 
-      // Note we don't check for ID_CONCURRENCY here because we want to fetch all pages for a given ID -
+      // Note we don't check for MAX_CONCURRENCY here because we want to fetch all pages for a given ID -
       // stopping part way makes keeping track much more complicated
       for (
         let currentPage = page;
@@ -414,7 +404,6 @@ export const waitForIndexedLambda: <T>(
     page_concurrency = PAGED_CONCURRENCY;
 
     if (eventKeys.length) {
-      progressFunc(fetchedPages, fetchedPages + (eventKeys.length - 1));
       fetchedPages += eventKeys.length;
 
       let fetchResults = (await waitForResults(eventKeys, true)) as null | {

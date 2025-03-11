@@ -110,7 +110,7 @@ const SelectTestCase: React.FC<Props> = ({
         referencePrefix='C'
         loading={loading}
         label='Select a test case'
-        placeholder={'No synced test cases found.'}
+        placeholder='No synced test cases found.'
       >
         {syncing && <SyncProgress syncData={syncData} />}
       </SearchByName>

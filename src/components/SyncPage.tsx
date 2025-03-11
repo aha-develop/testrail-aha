@@ -1,34 +1,21 @@
-import React, { useEffect, useState } from 'react';
-import { IDENTIFIER } from '../extension';
+import React, { useState } from 'react';
 import { Styles } from './Styles';
-import StatusSection from './syncPageSections/StatusSection';
-import ProjectSection from './syncPageSections/ProjectSection';
-import SuiteSection from './syncPageSections/SuiteSection';
-import SectionSection from './syncPageSections/SectionSection';
-import TestCaseSection from './syncPageSections/TestCaseSection';
-import OpenTestRunSection from './syncPageSections/OpenTestRunSection';
-import CompletedTestRunSection from './syncPageSections/CompletedTestRunSection';
-import OpenTestPlanSection from './syncPageSections/OpenTestPlanSection';
-import CompletedTestPlanSection from './syncPageSections/CompletedTestPlanSection';
-import TestSection from './syncPageSections/TestSection';
-import TestResultSection from './syncPageSections/TestResultSection';
+import StatusRow from './syncRows/StatusRow';
+import ProjectRow from './syncRows/ProjectRow';
+import SuiteRow from './syncRows/SuiteRow';
+import SectionRow from './syncRows/SectionRow';
+import TestCaseRow from './syncRows/TestCaseRow';
+import OpenTestRunRow from './syncRows/OpenTestRunRow';
+import CompletedTestRunRow from './syncRows/CompletedTestRunRow';
+import OpenTestPlanRow from './syncRows/OpenTestPlanRow';
+import CompletedTestPlanRow from './syncRows/CompletedTestPlanRow';
+import TestRow from './syncRows/TestRow';
+import TestResultRow from './syncRows/TestResultRow';
+import BulkSyncPanel from './BulkSyncPanel';
+import { SyncType } from '../lib/sync/bulkSync';
 
 const SyncPage: React.FC<{ domain: string }> = ({ domain }) => {
-  const [retryAt, setRetryAt] = useState<number | null>(null);
-  const [syncing, setSyncing] = useState<boolean>(false);
-
-  useEffect(() => {
-    async function initRetryAt() {
-      const actualRetryAt = await aha.account.getExtensionField<number>(
-        IDENTIFIER,
-        'retryAt'
-      );
-
-      if (actualRetryAt) setRetryAt(actualRetryAt);
-    }
-
-    initRetryAt();
-  }, []);
+  const [disabled, setDisabled] = useState<boolean>(false);
 
   return (
     <>
@@ -37,84 +24,100 @@ const SyncPage: React.FC<{ domain: string }> = ({ domain }) => {
         <div className='page-nav'>
           <div className='page-nav__row  page-nav__row--justify-left page-nav__row--align-top'>
             <div className='page-nav__cell'>
-              <h1>TestRail Syncing</h1>
+              <h1>TestRail Connection</h1>
             </div>
           </div>
         </div>
+        <div className='sync-background'>
+          <div className='sync-page'>
+            <div className='mb-4'>
+              <div className='h-500'>TestRail Data Sync</div>
+              <div className='mt-2'>
+                Check the sync status and manually re-sync records from TestRail
+                to ensure your data is up to date in Aha! Roadmaps.
+              </div>
+            </div>
 
-        {retryAt && retryAt > Date.now() && (
-          <div className='mb-5'>
-            <aha-alert type='danger' dismissable>
-              API rate limit reached. Please try again in a few minutes
-            </aha-alert>
+            <div className='sync-panel'>
+              <div className='sync-panel-header'>
+                <div>
+                  <div className='h-600'>Individual updates</div>
+                  <div className='mt-2'>
+                    Choose individual record types to sync only the data you
+                    need. This is useful for keeping specific records updated
+                    without running a full sync.
+                  </div>
+                </div>
+              </div>
+              <div className='sync-panel-content'>
+                <div className='sync-panel-top-row'>
+                  <span className='text-strong sync-panel-column'>
+                    Record type
+                  </span>
+                  <span className='text-strong sync-panel-column'>
+                    Last synced
+                  </span>
+                </div>
+
+                <StatusRow domain={domain} disabled={disabled} />
+                <ProjectRow domain={domain} disabled={disabled} />
+                <SuiteRow domain={domain} disabled={disabled} />
+                <SectionRow domain={domain} disabled={disabled} />
+                <OpenTestRunRow domain={domain} disabled={disabled} />
+                <CompletedTestRunRow domain={domain} disabled={disabled} />
+                <OpenTestPlanRow domain={domain} disabled={disabled} />
+                <CompletedTestPlanRow domain={domain} disabled={disabled} />
+                <TestRow domain={domain} disabled={disabled} />
+                <TestCaseRow domain={domain} disabled={disabled} />
+                <TestResultRow domain={domain} disabled={disabled} />
+              </div>
+            </div>
+
+            <BulkSyncPanel
+              domain={domain}
+              type={SyncType.Tests}
+              title='Update tests'
+              disabled={disabled}
+              setDisabled={setDisabled}
+            >
+              <div>
+                This sync ensures all test-related records are fully up-to-date.
+                Includes syncing projects, test runs, test plans, and tests.
+                This process may take some time, depending on the volume of
+                data.
+              </div>
+            </BulkSyncPanel>
+
+            <BulkSyncPanel
+              domain={domain}
+              type={SyncType.Cases}
+              title='Update test cases'
+              disabled={disabled}
+              setDisabled={setDisabled}
+            >
+              <div>
+                This sync ensures all test case-related records are fully
+                up-to-date. Includes syncing projects, suites, sections, and
+                test cases. This process may take some time, depending on the
+                volume of data.
+              </div>
+            </BulkSyncPanel>
+
+            <BulkSyncPanel
+              domain={domain}
+              type={SyncType.All}
+              title='Full TestRail re-sync'
+              disabled={disabled}
+              setDisabled={setDisabled}
+            >
+              <div>
+                Use this option only when troubleshooting major issues with
+                missing or outdated data. Running a full sync will re-sync all
+                records from TestRail, which may take a significant amount of
+                time.
+              </div>
+            </BulkSyncPanel>
           </div>
-        )}
-        <div className='sections'>
-          <StatusSection
-            domain={domain}
-            disabled={syncing}
-            setDisabled={setSyncing}
-          />
-
-          <ProjectSection
-            domain={domain}
-            disabled={syncing}
-            setDisabled={setSyncing}
-          />
-
-          <SuiteSection
-            domain={domain}
-            disabled={syncing}
-            setDisabled={setSyncing}
-          />
-
-          <SectionSection
-            domain={domain}
-            disabled={syncing}
-            setDisabled={setSyncing}
-          />
-
-          <TestCaseSection
-            domain={domain}
-            disabled={syncing}
-            setDisabled={setSyncing}
-          />
-
-          <OpenTestRunSection
-            domain={domain}
-            disabled={syncing}
-            setDisabled={setSyncing}
-          />
-
-          <CompletedTestRunSection
-            domain={domain}
-            disabled={syncing}
-            setDisabled={setSyncing}
-          />
-
-          <OpenTestPlanSection
-            domain={domain}
-            disabled={syncing}
-            setDisabled={setSyncing}
-          />
-
-          <CompletedTestPlanSection
-            domain={domain}
-            disabled={syncing}
-            setDisabled={setSyncing}
-          />
-
-          <TestSection
-            domain={domain}
-            disabled={syncing}
-            setDisabled={setSyncing}
-          />
-
-          <TestResultSection
-            domain={domain}
-            disabled={syncing}
-            setDisabled={setSyncing}
-          />
         </div>
       </div>
     </>

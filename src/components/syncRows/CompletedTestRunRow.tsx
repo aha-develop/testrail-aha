@@ -1,20 +1,16 @@
 import React from 'react';
 import { IDENTIFIER } from '../../extension';
 import { syncCompletedRuns } from '../../lib/sync/syncRuns';
-import BaseSection, { SectionProps, ResyncProps } from './BaseSection';
+import BaseSyncRow, { RowProps, ResyncProps } from './BaseSyncRow';
+import { showError } from '../../lib/util';
 
 const resync: (props: ResyncProps) => Promise<void> = async ({
   domain,
-  setLoading,
   setLastSync,
   setSyncing,
-  setMessage,
-  setError,
 }) => {
   try {
     setSyncing(true);
-    setLoading(true);
-    setMessage('Fetching projects for test runs...');
 
     const projectIds =
       (await aha.account.getExtensionField<number[]>(
@@ -27,33 +23,27 @@ const resync: (props: ResyncProps) => Promise<void> = async ({
     await syncCompletedRuns({
       domain,
       projectIds,
-      logger: setMessage,
     });
     setLastSync(now);
   } catch (error) {
-    setMessage(null);
-    setError(error.message);
+    showError(error.message);
   } finally {
-    setLoading(false);
     setSyncing(false);
   }
 };
 
-const CompletedTestRunSection: React.FC<SectionProps> = ({
-  domain,
-  disabled,
-  setDisabled,
-}) => {
+const CompletedTestRunRow: React.FC<RowProps> = ({ domain, disabled }) => {
   return (
-    <BaseSection
-      title='Sync completed test runs'
+    <BaseSyncRow
+      recordType='Test runs (complete)'
+      tooltip='Syncs the last 250 completed test runs (per project) from TestRail.'
       resync={resync}
       domain={domain}
       disabled={disabled}
-      setDisabled={setDisabled}
-      syncKey={'lastCompletedRunSync'}
+      syncKey='syncingCompletedRuns'
+      lastSyncKey='lastCompletedRunSync'
     />
   );
 };
 
-export default CompletedTestRunSection;
+export default CompletedTestRunRow;

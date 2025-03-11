@@ -216,7 +216,7 @@ const LinkTestRun: React.FC<Props> = ({
             referencePrefix='R'
             loading={loading}
             label='Select a test run'
-            placeholder={'No synced test runs found.'}
+            placeholder='No synced test runs found.'
           >
             {syncing && <SyncProgress syncData={syncData} />}
           </SearchByName>
