@@ -26,7 +26,7 @@ It provides these contributions:
 
 **Note: In order to install an extension into your Aha! Develop account, you must be an account administrator.**
 
-1. Install the TestRail extension by clicking [here](https://example.com).
+1. Install the TestRail extension by clicking [here](https://secure.aha.io/settings/account/extensions/install?url=https%3A%2F%2Fsecure.aha.io%2Fextensions%2Faha-develop.testrail.gz).
 
 2. As a TestRail user with access to all projects you want to sync, configure an API key in TestRail.
    - In TestRail, click on your username and select 'My Settings', then go to the 'API Keys' tab.
