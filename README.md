@@ -44,6 +44,8 @@ It provides these contributions:
 
    - Enter the TestRail email address of the user that generated the key in step 2 into the 'TestRail API Username' field.
 
+   - (Optional) Adjust the automatic sync delay field. This controls how often auto-sync will run when you visit the tests tab. It defaults to 1 hour (3600 seconds) since the last successful sync.
+
 4. Run initial sync.
    - In Aha!, go to Work -> TestRail Connection. Click 'Sync all' next to 'Full TestRail re-sync'.
    - You can also trigger initial sync by visiting the tests tab on any feature, requirement or sprint.
@@ -67,12 +69,6 @@ Install required modules:
 
 ```sh
 yarn install
-```
-
-The extension makes requests to GitHub's graphql API. Changes to the graphql queries in lib/github/queries need to be compiled by running:
-
-```
-yarn codegen
 ```
 
 **Note: In order to install an extension into your Aha! Develop account, you must be an account administrator.**
