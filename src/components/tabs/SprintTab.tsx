@@ -28,9 +28,9 @@ type SprintTabData = {
   statuses: { [key: string]: Status };
 };
 
-export async function getSprintTabData(
+const getSprintTabData: (
   runIds: number[]
-): Promise<SprintTabData> {
+) => Promise<SprintTabData> = async runIds => {
   const runs = await getRecords<TestRun>(runIds, 'TestRun');
   const [testMap, tests] = await getRunRowData(runIds);
 
@@ -49,7 +49,7 @@ export async function getSprintTabData(
     comments: commentMap,
     statuses: statusMap,
   };
-}
+};
 
 const SprintTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   const runIds = fields['runIds'] as number[] | undefined;
@@ -68,12 +68,12 @@ const SprintTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   const syncDelay = settings.get('syncDelay') as number | undefined;
 
   useEffect(() => {
-    async function initData() {
+    const initData = async () => {
       const tabData = await getSprintTabData(runIds);
 
       setTabData(tabData);
       setLoading(false);
-    }
+    };
 
     initData();
   }, [runIds, reload]);

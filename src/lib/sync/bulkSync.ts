@@ -8,12 +8,15 @@ import { syncCompletedPlans, syncOpenPlans } from './syncPlans';
 import { syncCompletedRuns, syncOpenRuns } from './syncRuns';
 import syncTests from './syncTests';
 import syncResults from './syncResults';
-import {
-  getAccountExtensionFieldMap,
-  indexKeyForKindAndParent,
-} from '../extensionFields/queries';
+import { getProjectSuiteMapping } from '../extensionFields/queries';
 
 const MAX_RUN_TIME = 60 * 60 * 1000;
+
+export enum SyncType {
+  All,
+  Cases,
+  Tests,
+}
 
 export enum SyncState {
   Pending,
@@ -47,7 +50,9 @@ export type BulkSyncState = {
 
 type SyncProps = {
   domain: string;
+  type: SyncType;
   syncDelay: number;
+  getLatest: boolean;
   updateState: (state: BulkSyncState) => void;
   setShouldWait: (shouldWait: boolean) => void;
 };
@@ -60,6 +65,7 @@ type SyncResults = {
 
 type BaseSyncStageProps = {
   domain: string;
+  type: SyncType;
   syncState: BulkSyncState;
   setSyncState: (state: BulkSyncState) => Promise<void>;
 };
@@ -69,16 +75,35 @@ type SyncStageWithRequirementsProps = BaseSyncStageProps & {
   results: SyncResults;
 };
 
-const getSyncState: () => Promise<BulkSyncState> = async () => {
+export const getSyncKey: (type: SyncType) => string = type => {
+  switch (type) {
+    case SyncType.All:
+      return 'bulkSyncState';
+    case SyncType.Cases:
+      return 'caseSyncState';
+    case SyncType.Tests:
+      return 'testSyncState';
+  }
+};
+
+const getInitialStage: (type: SyncType) => SyncStage = type => {
+  if (type === SyncType.All) {
+    return SyncStage.Statuses;
+  }
+
+  return SyncStage.Projects;
+};
+
+const getSyncState: (type: SyncType) => Promise<BulkSyncState> = async type => {
   let syncState = await aha.account.getExtensionField<BulkSyncState>(
     IDENTIFIER,
-    'bulkSyncState'
+    getSyncKey(type)
   );
 
   if (!syncState) {
     syncState = {
       state: SyncState.Pending,
-      stage: SyncStage.Statuses,
+      stage: getInitialStage(type),
       progress: 0,
       startedAt: Date.now(),
     };
@@ -87,32 +112,23 @@ const getSyncState: () => Promise<BulkSyncState> = async () => {
   return syncState;
 };
 
-const getSavedProjectSuites: (
-  projectIds: number[]
-) => Promise<{ [projectId: string]: number[] }> = async projectIds => {
-  const keys = projectIds.map(projectId =>
-    indexKeyForKindAndParent('Suite', projectId)
-  );
-
-  const projectSuites = {};
-  const suiteFields = await getAccountExtensionFieldMap<number[]>(keys);
-
-  for (const key in suiteFields) {
-    const projectId = key.split('_')[1];
-
-    if (!projectSuites[projectId]) {
-      projectSuites[projectId] = [];
-    }
-
-    projectSuites[projectId].push(...suiteFields[key]);
+const progressForStage: (stage: SyncStage, type: SyncType) => number = (
+  stage,
+  type
+) => {
+  switch (type) {
+    case SyncType.All:
+      return progressForBulkSyncStage(stage);
+    case SyncType.Cases:
+      return progressForCaseSyncStage(stage);
+    case SyncType.Tests:
+      return progressForTestSyncStage(stage);
   }
-
-  return projectSuites;
 };
 
 // Very rough heuristic, getting finer-grained
 // progress is very difficult.
-const progressForStage: (stage: SyncStage) => number = stage => {
+const progressForBulkSyncStage: (stage: SyncStage) => number = stage => {
   switch (stage) {
     case SyncStage.Statuses:
       return 0;
@@ -139,13 +155,49 @@ const progressForStage: (stage: SyncStage) => number = stage => {
   }
 };
 
+const progressForCaseSyncStage: (stage: SyncStage) => number = stage => {
+  switch (stage) {
+    case SyncStage.Projects:
+      return 0;
+    case SyncStage.Suites:
+      return 20;
+    case SyncStage.Sections:
+      return 40;
+    case SyncStage.TestCases:
+      return 60;
+    default:
+      return 100; // Should not be possible
+  }
+};
+
+const progressForTestSyncStage: (stage: SyncStage) => number = stage => {
+  switch (stage) {
+    case SyncStage.Projects:
+      return 0;
+    case SyncStage.OpenRuns:
+      return 5;
+    case SyncStage.CompletedRuns:
+      return 20;
+    case SyncStage.OpenPlans:
+      return 30;
+    case SyncStage.CompletedPlans:
+      return 45;
+    case SyncStage.Tests:
+      return 55;
+    case SyncStage.Results:
+      return 80;
+  }
+};
+
 const bulkSync: (props: SyncProps) => Promise<void> = async ({
   domain,
+  type,
   syncDelay,
+  getLatest,
   updateState,
   setShouldWait,
 }) => {
-  let syncState = await getSyncState();
+  let syncState = await getSyncState(type);
   let syncResults: SyncResults = {};
 
   if (
@@ -156,23 +208,27 @@ const bulkSync: (props: SyncProps) => Promise<void> = async ({
     return;
   } else if (
     syncState.state === SyncState.Complete &&
-    (syncDelay < 0 || syncState.startedAt + syncDelay * 1000 > Date.now())
+    syncState.startedAt + syncDelay * 1000 > Date.now()
   ) {
     updateState(syncState);
     return;
-  } else if (syncState.lastSync) {
+  } else if (type === SyncType.All && syncState.lastSync && getLatest) {
     // Skip statuses/projects/suites on a resync
     const stage = SyncStage.TestCases;
-    syncState = { ...syncState, stage, progress: progressForStage(stage) };
+    syncState = {
+      ...syncState,
+      stage,
+      progress: progressForBulkSyncStage(stage),
+    };
 
     const projectIds = await aha.account.getExtensionField<number[]>(
       IDENTIFIER,
       'projectIds'
     );
-    const projectSuites = await getSavedProjectSuites(projectIds);
+    const projectSuites = await getProjectSuiteMapping(projectIds);
     syncResults = { projectIds, projectSuites };
   } else {
-    syncState = { ...syncState, stage: SyncStage.Statuses, progress: 0 };
+    syncState = { ...syncState, stage: getInitialStage(type), progress: 0 };
   }
 
   syncState = {
@@ -182,7 +238,7 @@ const bulkSync: (props: SyncProps) => Promise<void> = async ({
   };
 
   const setSyncState: (state: BulkSyncState) => Promise<void> = async state => {
-    await aha.account.setExtensionField(IDENTIFIER, 'bulkSyncState', state);
+    await aha.account.setExtensionField(IDENTIFIER, getSyncKey(type), state);
     updateState(state);
   };
 
@@ -200,9 +256,10 @@ const bulkSync: (props: SyncProps) => Promise<void> = async ({
   await setSyncState(syncState);
 
   try {
-    if (syncState.stage === SyncStage.Statuses) {
+    if (syncState.stage === SyncStage.Statuses || type !== SyncType.All) {
       [syncResults, syncState] = await syncInitialRecords({
         domain,
+        type,
         syncState,
         setSyncState,
       });
@@ -210,23 +267,26 @@ const bulkSync: (props: SyncProps) => Promise<void> = async ({
 
     [syncResults, syncState] = await syncRequiresProjects({
       domain,
+      type,
       syncState,
       setSyncState,
       results: syncResults,
-      lastSync: syncState.lastSync,
+      lastSync: getLatest ? syncState.lastSync : null,
     });
 
-    await syncRequiresRuns({
-      domain,
-      syncState,
-      setSyncState,
-      lastSync: syncState.lastSync,
-      results: syncResults,
-    });
-
-    window.removeEventListener('beforeunload', failSync);
+    if (type !== SyncType.Cases)
+      await syncRequiresRuns({
+        domain,
+        type,
+        syncState,
+        setSyncState,
+        lastSync: getLatest ? syncState.lastSync : null,
+        results: syncResults,
+      });
   } catch (error) {
     // Handled in the methods, but catch here to skip later stages
+  } finally {
+    window.removeEventListener('beforeunload', failSync);
   }
 };
 
@@ -234,38 +294,50 @@ const syncInitialRecords: (
   props: BaseSyncStageProps
 ) => Promise<[SyncResults, BulkSyncState]> = async ({
   domain,
+  type,
   syncState,
   setSyncState,
 }) => {
   let newSyncState = { ...syncState };
 
   try {
-    const logger = (_message: string) => {}; // Stub as we don't want descriptive logging in bulk sync
+    if (syncState.stage === SyncStage.Statuses) {
+      await syncStatuses({ domain });
 
-    await syncStatuses({ domain, logger });
+      newSyncState = {
+        ...syncState,
+        progress: progressForStage(SyncStage.Projects, type),
+        stage: SyncStage.Projects,
+      };
+
+      await setSyncState(newSyncState);
+    }
+
+    const projects = await syncProjects({ domain });
+
+    let nextStage = SyncStage.Suites;
+    if (type === SyncType.Tests) {
+      nextStage = SyncStage.OpenRuns;
+    }
 
     newSyncState = {
       ...syncState,
-      progress: progressForStage(SyncStage.Projects),
-      stage: SyncStage.Projects,
+      progress: progressForStage(nextStage, type),
+      stage: nextStage,
     };
 
     await setSyncState(newSyncState);
 
-    const projects = await syncProjects({ domain, logger });
-
-    newSyncState = {
-      ...syncState,
-      progress: progressForStage(SyncStage.Suites),
-      stage: SyncStage.Suites,
-    };
-
-    await setSyncState(newSyncState);
+    if (type === SyncType.Tests) {
+      return [
+        { projectIds: projects.map(project => project.id) },
+        newSyncState,
+      ];
+    }
 
     const projectIds = projects.map(project => project.id);
     const suiteParams = {
       domain,
-      logger,
       projectIds,
     };
 
@@ -282,7 +354,7 @@ const syncInitialRecords: (
 
     newSyncState = {
       ...syncState,
-      progress: progressForStage(SyncStage.Sections),
+      progress: progressForStage(SyncStage.Sections, type),
       stage: SyncStage.Sections,
     };
 
@@ -290,7 +362,6 @@ const syncInitialRecords: (
 
     const sectionParams = {
       domain,
-      logger,
       projectSuites,
     };
 
@@ -298,7 +369,7 @@ const syncInitialRecords: (
 
     newSyncState = {
       ...syncState,
-      progress: progressForStage(SyncStage.TestCases),
+      progress: progressForStage(SyncStage.TestCases, type),
       stage: SyncStage.TestCases,
     };
 
@@ -317,6 +388,7 @@ const syncRequiresProjects: (
   props: SyncStageWithRequirementsProps
 ) => Promise<[SyncResults, BulkSyncState]> = async ({
   domain,
+  type,
   syncState,
   setSyncState,
   results,
@@ -325,29 +397,33 @@ const syncRequiresProjects: (
   let newSyncState = { ...syncState };
 
   try {
-    const logger = (_message: string) => {};
     const runs = [];
 
-    const caseParams = {
-      domain,
-      logger,
-      projectSuites: results.projectSuites,
-      lastCaseSync: lastSync,
-    };
+    if (syncState.stage === SyncStage.TestCases) {
+      const caseParams = {
+        domain,
+        projectSuites: results.projectSuites,
+        lastCaseSync: lastSync,
+      };
 
-    await syncCases(caseParams);
+      await syncCases(caseParams);
 
-    newSyncState = {
-      ...syncState,
-      progress: progressForStage(SyncStage.OpenRuns),
-      stage: SyncStage.OpenRuns,
-    };
+      newSyncState = {
+        ...syncState,
+        progress: progressForStage(SyncStage.OpenRuns, type),
+        stage: SyncStage.OpenRuns,
+      };
+    }
+
+    if (type === SyncType.Cases) {
+      await finishSync(syncState, type, setSyncState);
+      return [results, newSyncState];
+    }
 
     await setSyncState(newSyncState);
 
     const baseParams = {
       domain,
-      logger,
       projectIds: results.projectIds,
     };
 
@@ -357,7 +433,7 @@ const syncRequiresProjects: (
 
     newSyncState = {
       ...syncState,
-      progress: progressForStage(SyncStage.CompletedRuns),
+      progress: progressForStage(SyncStage.CompletedRuns, type),
       stage: SyncStage.CompletedRuns,
     };
 
@@ -367,7 +443,7 @@ const syncRequiresProjects: (
 
     newSyncState = {
       ...syncState,
-      progress: progressForStage(SyncStage.OpenPlans),
+      progress: progressForStage(SyncStage.OpenPlans, type),
       stage: SyncStage.OpenPlans,
     };
 
@@ -379,7 +455,7 @@ const syncRequiresProjects: (
 
     newSyncState = {
       ...syncState,
-      progress: progressForStage(SyncStage.CompletedPlans),
+      progress: progressForStage(SyncStage.CompletedPlans, type),
       stage: SyncStage.CompletedPlans,
     };
 
@@ -389,7 +465,7 @@ const syncRequiresProjects: (
 
     newSyncState = {
       ...syncState,
-      progress: progressForStage(SyncStage.Tests),
+      progress: progressForStage(SyncStage.Tests, type),
       stage: SyncStage.Tests,
     };
 
@@ -408,6 +484,7 @@ const syncRequiresRuns: (
   props: SyncStageWithRequirementsProps
 ) => Promise<void> = async ({
   domain,
+  type,
   syncState,
   setSyncState,
   lastSync,
@@ -416,11 +493,8 @@ const syncRequiresRuns: (
   let newSyncState = { ...syncState };
 
   try {
-    const logger = (_message: string) => {}; // Stub as we don't want descriptive logging in bulk sync
-
     const testParams = {
       domain,
-      logger,
       runIds: results.runIds,
     };
 
@@ -428,7 +502,7 @@ const syncRequiresRuns: (
 
     newSyncState = {
       ...syncState,
-      progress: progressForStage(SyncStage.Results),
+      progress: progressForStage(SyncStage.Results, type),
       stage: SyncStage.Results,
     };
 
@@ -436,33 +510,34 @@ const syncRequiresRuns: (
 
     const resultParams = {
       domain,
-      logger,
       lastResultSync: lastSync,
       runIds: results.runIds,
     };
 
     await syncResults(resultParams);
 
-    newSyncState = {
-      ...syncState,
-      state: SyncState.Complete,
-      progress: 100,
-      lastSync: syncState.startedAt,
-    };
-
-    await setSyncState(newSyncState);
-
-    await aha.account.setExtensionField(
-      IDENTIFIER,
-      'lastBulkSync',
-      syncState.startedAt
-    );
+    await finishSync(newSyncState, type, setSyncState);
   } catch (error) {
     syncState = { ...newSyncState, state: SyncState.Errored };
     await setSyncState(syncState);
 
     throw error;
   }
+};
+
+const finishSync: (
+  syncState: BulkSyncState,
+  type: SyncType,
+  setSyncState: (state: BulkSyncState) => void
+) => void = async (syncState, type, setSyncState) => {
+  const newSyncState = {
+    ...syncState,
+    state: SyncState.Complete,
+    progress: 100,
+    lastSync: syncState.startedAt,
+  };
+
+  await setSyncState(newSyncState);
 };
 
 export default bulkSync;

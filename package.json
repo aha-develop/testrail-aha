@@ -1,5 +1,5 @@
 {
-  "name": "aha-develop.testrail-aha",
+  "name": "aha-develop.testrail",
   "description": "TestRail",
   "version": "1.0.0",
   "author": "Aha! (support@aha.io)",
@@ -36,77 +36,77 @@
           "title": "Create Test Case",
           "entryPoint": "src/events/createTestCase.ts",
           "handles": [
-            "aha-develop.testrail-aha.createTestCase"
+            "aha-develop.testrail.createTestCase"
           ]
         },
         "syncStatuses": {
           "title": "Sync Statuses",
           "entryPoint": "src/events/syncStatuses.ts",
           "handles": [
-            "aha-develop.testrail-aha.syncStatuses"
+            "aha-develop.testrail.syncStatuses"
           ]
         },
         "syncProjects": {
           "title": "Sync Projects",
           "entryPoint": "src/events/syncProjects.ts",
           "handles": [
-            "aha-develop.testrail-aha.syncProjects"
+            "aha-develop.testrail.syncProjects"
           ]
         },
         "syncSuites": {
           "title": "Sync Suites",
           "entryPoint": "src/events/syncSuites.ts",
           "handles": [
-            "aha-develop.testrail-aha.syncSuites"
+            "aha-develop.testrail.syncSuites"
           ]
         },
         "syncSections": {
           "title": "Sync Sections",
           "entryPoint": "src/events/syncSections.ts",
           "handles": [
-            "aha-develop.testrail-aha.syncSections"
+            "aha-develop.testrail.syncSections"
           ]
         },
         "syncCases": {
           "title": "Sync Test Cases",
           "entryPoint": "src/events/syncCases.ts",
           "handles": [
-            "aha-develop.testrail-aha.syncCases"
+            "aha-develop.testrail.syncCases"
           ]
         },
         "syncRuns": {
           "title": "Sync Test Runs",
           "entryPoint": "src/events/syncRuns.ts",
           "handles": [
-            "aha-develop.testrail-aha.syncRuns"
+            "aha-develop.testrail.syncRuns"
           ]
         },
         "syncPlans": {
           "title": "Sync Test Plans",
           "entryPoint": "src/events/syncPlans.ts",
           "handles": [
-            "aha-develop.testrail-aha.syncPlans"
+            "aha-develop.testrail.syncPlans"
           ]
         },
         "syncRunsForPlan": {
           "title": "Sync Test Runs for Test Plan",
           "entryPoint": "src/events/syncRunsForPlan.ts",
           "handles": [
-            "aha-develop.testrail-aha.syncRunsForPlan"
+            "aha-develop.testrail.syncRunsForPlan"
           ]
         },
         "syncTests": {
           "title": "Sync Tests",
           "entryPoint": "src/events/syncTests.ts",
           "handles": [
-            "aha-develop.testrail-aha.syncTests"
+            "aha-develop.testrail.syncTests"
           ]
         },
         "syncResults": {
           "title": "Sync Test Results",
           "entryPoint": "src/events/syncResults.ts",
           "handles": [
-            "aha-develop.testrail-aha.syncResults"
+            "aha-develop.testrail.syncResults"
           ]
         }
       },
@@ -152,7 +152,11 @@
     "moment": "^2.29.4"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.14",
     "@types/prop-types": "^15.7.14",
-    "@types/react": "^16.8.0"
+    "@types/react": "^16.8.0",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.2.6",
+    "typescript": "^5.8.2"
   }
 }

@@ -27,11 +27,11 @@ export const linkRecord: (
   await record.setExtensionField(IDENTIFIER, key, existingIds);
 };
 
-export async function unlinkRecord(
+export const unlinkRecord: (
   record: ExtensionRecord,
   id: number,
   key: string
-) {
+) => Promise<void> = async (record, id, key) => {
   let ids = (await record.getExtensionField(IDENTIFIER, key)) as
     | number[]
     | undefined;
@@ -41,7 +41,7 @@ export async function unlinkRecord(
   if (newIds.length === ids.length) return;
 
   await record.setExtensionField(IDENTIFIER, key, newIds);
-}
+};
 
 export const saveRecords: <T extends TestRailRecord>(
   records: T[]

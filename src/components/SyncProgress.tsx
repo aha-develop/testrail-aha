@@ -21,7 +21,10 @@ const messageFromState = (state: BulkSyncState) => {
       type = 'projects';
       break;
     case SyncStage.Suites:
-      type = 'suites';
+      type = 'test suites';
+      break;
+    case SyncStage.Sections:
+      type = 'sections';
       break;
     case SyncStage.TestCases:
       type = 'test cases';
@@ -38,7 +41,7 @@ const messageFromState = (state: BulkSyncState) => {
       type = 'tests';
       break;
     case SyncStage.Results:
-      type = 'test results';
+      type = 'test comments';
       break;
   }
 

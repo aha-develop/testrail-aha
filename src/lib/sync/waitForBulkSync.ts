@@ -1,5 +1,10 @@
 import { sleep } from '../util';
-import bulkSync, { BulkSyncState, SyncState } from './bulkSync';
+import bulkSync, {
+  getSyncKey,
+  BulkSyncState,
+  SyncState,
+  SyncType,
+} from './bulkSync';
 import { getAccountExtensionFieldMap } from '../extensionFields/queries';
 
 const SLEEP_INTERVAL = 1 * 1000;
@@ -9,7 +14,10 @@ type WaitProps = {
   setState: (state: BulkSyncState) => void;
   domain: string;
   syncDelay: number;
-  reload: () => void;
+  reload?: () => void;
+  type?: SyncType;
+  start?: boolean;
+  getLatest?: boolean;
 };
 
 const waitForBulkSync: (props: WaitProps) => Promise<void> = async ({
@@ -17,6 +25,9 @@ const waitForBulkSync: (props: WaitProps) => Promise<void> = async ({
   syncDelay,
   domain,
   reload,
+  type = SyncType.All,
+  start = true,
+  getLatest = true,
 }) => {
   let state;
   let shouldWait = true;
@@ -31,7 +42,16 @@ const waitForBulkSync: (props: WaitProps) => Promise<void> = async ({
   };
 
   // Kick off a bulk sync if not already running
-  bulkSync({ domain, syncDelay, updateState, setShouldWait });
+  if (start) {
+    bulkSync({
+      domain,
+      type,
+      syncDelay,
+      getLatest,
+      updateState,
+      setShouldWait,
+    });
+  }
 
   while (!state || state.state === SyncState.Running) {
     const interval = shouldWait ? SLEEP_INTERVAL : TIMEOUT_SLEEP_INTERVAL;
@@ -40,27 +60,34 @@ const waitForBulkSync: (props: WaitProps) => Promise<void> = async ({
 
     const keys = ['retryAt'];
 
+    const syncKey = getSyncKey(type);
+
     // Only fetch state if it's not running locally and the initial state has been set
-    if (shouldWait && state) {
-      keys.push('bulkSyncState');
+    if (shouldWait && (state || !start)) {
+      keys.push(syncKey);
     }
 
     const values = await getAccountExtensionFieldMap(keys);
 
-    if (shouldWait && state && values['bulkSyncState']) {
-      state = values['bulkSyncState'];
+    // Sync hasn't started - no reason to wait
+    if (!start && !values[syncKey]) {
+      return;
+    }
+
+    if (shouldWait && (state || !start) && values[syncKey]) {
+      state = values[syncKey];
       setState(state);
     }
 
     const retryAt = values['retryAt'] as number | undefined;
 
-    if (retryAt && retryAt > Date.now()) {
+    if (start && retryAt && retryAt > Date.now()) {
       setState({ ...state, state: SyncState.Timeout });
       await sleep(retryAt - Date.now());
     }
   }
 
-  if (state.state === SyncState.Complete) {
+  if (state.state === SyncState.Complete && reload) {
     reload();
   }
 };

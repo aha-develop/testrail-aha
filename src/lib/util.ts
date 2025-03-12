@@ -27,3 +27,38 @@ export const numberToColor: (color: number) => string = color => {
 
   return hex + '99'; // 60% opacity
 };
+
+// Aha! renders top-level alerts in the 'ajax-flash' div
+// Set the value here to mimic core Aha! behaviour
+const showMessage: (
+  msg: string,
+  type: 'danger' | 'warning',
+  heading?: string
+) => void = (msg, type, heading) => {
+  const flash = `
+    <aha-alert type='${type}' dismissable>
+      <button type='button' slot='close'>
+        <i class='fa-regular fa-times'></i>
+      </button>
+      ${heading ? `<div slot='heading'>${heading}</div>` : ''}
+      <div>${msg}</div>
+    </aha-alert>
+  `;
+
+  const noticeNode = document.querySelector('.ajax-flash');
+
+  noticeNode.replaceChildren();
+  noticeNode.insertAdjacentHTML('beforeend', flash);
+};
+
+export const showError: (msg: string) => void = msg => {
+  showMessage(msg, 'danger');
+};
+
+export const showSyncWarning: () => void = () => {
+  showMessage(
+    'You can navigate in other tabs, but do not close this page or refresh it until the sync is finished.',
+    'warning',
+    'You must remain on the page while the sync completes.'
+  );
+};

@@ -26,7 +26,7 @@ const syncSections: (props: SyncSectionsProps) => void = async ({
     const params = [`offset=${page ? (page - 1) * 250 : 0}`];
 
     if (suiteId) {
-      params.unshift(`suite_id=${suiteId}`); // Has to be the first param after projectId
+      params.unshift(`suite_id=${suiteId}`);
     }
 
     const path = `get_sections/${projectId}&${params.join('&')}`;

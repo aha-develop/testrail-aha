@@ -6,7 +6,7 @@ import {
 } from './interface';
 import { saveRecords, saveNewRuns } from '../extensionFields/updates';
 
-// We don't want to fetch more than a page of completed plans, to avoid loading up on historic data.
+// We don't want to fetch more than a page of completed plans per project, to avoid loading up on historic data.
 const NUM_COMPLETED_PLANS = 250;
 
 type SyncPlanProps = BaseSyncProps & {
@@ -24,12 +24,10 @@ type SyncRunProps = BaseSyncProps & {
 
 export const syncOpenPlans: (
   props: SyncPlanProps
-) => Promise<TestRun[]> = async ({ domain, projectIds, logger }) => {
+) => Promise<TestRun[]> = async ({ domain, projectIds }) => {
   if (!projectIds?.length) {
     throw new Error('No synced projects found, skipping open test plan sync.');
   }
-
-  logger('Beginning load of open test plans from TestRail');
 
   const now = Date.now();
 
@@ -41,39 +39,30 @@ export const syncOpenPlans: (
     await aha.triggerServer(`${IDENTIFIER}.syncPlans`, args);
   };
 
-  const progressFunc = async (firstPage, lastPage) => {
-    logger(`Fetching open test plans, pages ${firstPage} to ${lastPage}...`);
-  };
-
   const argFunc = (index: number) => ({ projectId: projectIds[index] });
 
   const openPlans = await waitForIndexedLambda<number>({
     lambdaFunc,
-    progressFunc,
     args,
     eventKey,
     argFunc,
     numIds: projectIds.length,
   });
 
-  logger('Successfully fetched all open test plans');
-
   await aha.account.setExtensionField(IDENTIFIER, 'lastPlanSync', now);
-  return await syncRunsForPlan({ domain, planIds: openPlans, logger });
+  return await syncRunsForPlan({ domain, planIds: openPlans });
 };
 
 // This stage is primarily useful for first sync to get historical data,
 // or as a backup if a plan managed to open and close between syncs of open plans.
 export const syncCompletedPlans: (
   props: SyncCompletedProps
-) => Promise<TestRun[]> = async ({ domain, projectIds, logger }) => {
+) => Promise<TestRun[]> = async ({ domain, projectIds }) => {
   if (!projectIds?.length) {
     throw new Error(
       'No synced projects found, skipping completed test plan sync.'
     );
   }
-
-  logger('Beginning load of completed test plans from TestRail');
 
   const now = Date.now();
 
@@ -85,15 +74,8 @@ export const syncCompletedPlans: (
     await aha.triggerServer(`${IDENTIFIER}.syncPlans`, args);
   };
 
-  const progressFunc = async (firstPage, lastPage) => {
-    logger(
-      `Fetching completed test plans, pages ${firstPage} to ${lastPage}...`
-    );
-  };
-
   const planIds = await waitForPagedLambda<number>({
     lambdaFunc,
-    progressFunc,
     args,
     eventKey,
     usePage: false,
@@ -101,24 +83,18 @@ export const syncCompletedPlans: (
     ids: projectIds,
   });
 
-  logger('Successfully fetched all completed test plans');
-
   await aha.account.setExtensionField(IDENTIFIER, 'lastCompletedPlanSync', now);
-  return await syncRunsForPlan({ domain, planIds, logger, completed: true });
+  return await syncRunsForPlan({ domain, planIds, completed: true });
 };
 
 const syncRunsForPlan: (props: SyncRunProps) => Promise<TestRun[]> = async ({
   domain,
   planIds,
-  logger,
   completed = false,
 }) => {
   if (!planIds || planIds.length === 0) {
-    logger('No test plans found, skipping test run sync.');
     return [];
   }
-
-  logger('Beginning load of test runs for plans from TestRail.');
 
   const eventKey = `syncPlanRuns-${Date.now()}`;
 
@@ -126,15 +102,8 @@ const syncRunsForPlan: (props: SyncRunProps) => Promise<TestRun[]> = async ({
     await aha.triggerServer(`${IDENTIFIER}.syncRunsForPlan`, args);
   };
 
-  const progressFunc = async (firstPage, lastPage) => {
-    logger(
-      `Fetching test runs from plans, pages ${firstPage} to ${lastPage}...`
-    );
-  };
-
   let runs = await waitForPagedLambda<TestRun>({
     lambdaFunc,
-    progressFunc,
     args: { domain },
     eventKey,
     usePage: false,
@@ -143,17 +112,12 @@ const syncRunsForPlan: (props: SyncRunProps) => Promise<TestRun[]> = async ({
     ids: planIds,
   });
 
-  logger('Successfully fetched all test runs for plans');
-
-  logger('Saving fetched test runs to Aha!');
-
   // When syncing completed plans, only save new records to reduce syncing effort.
   if (completed) {
     runs = await saveNewRuns(runs);
   } else {
     await saveRecords<TestRun>(runs);
   }
-  logger('Successfully saved all test runs');
 
   return runs;
 };
