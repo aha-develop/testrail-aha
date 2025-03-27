@@ -21,6 +21,8 @@ const queryExtensionFields: (
       })
       .find(aha.account.id);
 
+    if (!result.extensionFields) continue;
+
     results.push(...result.extensionFields);
   }
 

@@ -134,6 +134,10 @@ const waitForResults: (
     return acc;
   }, {});
 
+  for (const key of eventKeys) {
+    await aha.account.clearExtensionField(IDENTIFIER, key);
+  }
+
   if (returnMap) return errors;
 
   return Object.values(errors);
@@ -147,7 +151,7 @@ export const waitForLambda: <T extends LambdaResult>(
   lambdaFunc,
   args,
 }) => {
-  let result;
+  let result: T[] | null = null;
 
   // Possible in the case of a failed cleanup
   await aha.account.clearExtensionField(IDENTIFIER, eventKey);
@@ -159,10 +163,10 @@ export const waitForLambda: <T extends LambdaResult>(
     });
 
     // No result means we timed out, so we have to re-call the lambda
-    result = await waitForResults([eventKey]);
+    result = (await waitForResults([eventKey])) as T[];
   }
 
-  return result[0] as T;
+  return result[0];
 };
 
 // As above, but makes multiple calls to the lambda to fetch pages until there
@@ -230,7 +234,7 @@ export const waitForPagedLambda: <T>(
   let hasMore = true;
 
   // Slightly different handling because paged and unpaged results have a different structure
-  if (isPaginated) {
+  if (isPaginated && usePage) {
     hasMore = fetchResults[fetchResults.length - 1].result?.hasMore;
     results.push(
       ...fetchResults.flatMap(
@@ -270,6 +274,9 @@ export const waitForPagedLambda: <T>(
       page++;
     }
 
+    // Circuit break in the event hasMore was set incorrectly
+    if (eventKeys.length === 0) break;
+
     fetchResults = (await waitForResults(eventKeys)) as null | LambdaResult[];
 
     while (!fetchResults) {
@@ -287,7 +294,9 @@ export const waitForPagedLambda: <T>(
 
     error = fetchResults.find(result => result.error)?.message;
 
-    if (isPaginated) {
+    if (error) throw new Error(error);
+
+    if (isPaginated && usePage) {
       hasMore = fetchResults[fetchResults.length - 1].result?.hasMore;
       results.push(
         ...fetchResults.flatMap(
@@ -301,8 +310,6 @@ export const waitForPagedLambda: <T>(
       );
     }
   }
-
-  if (error) throw new Error(error);
 
   return results;
 };

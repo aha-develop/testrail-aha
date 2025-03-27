@@ -6,7 +6,6 @@ import {
   getRecords,
   getProjectRecords,
 } from '../../lib/extensionFields/queries';
-import { ExtensionRecord } from '../../lib/extensionRecord';
 import { BulkSyncState, SyncStage, SyncState } from '../../lib/sync/bulkSync';
 
 type Props = {
