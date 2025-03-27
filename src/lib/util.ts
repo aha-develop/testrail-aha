@@ -11,7 +11,10 @@ export const timeAgo: (timestamp: number | null) => string = timestamp => {
 export const truncate: (text: string) => string = text => {
   if (!text) return text;
 
-  return text.length > MAX_LENGTH ? text.slice(0, MAX_LENGTH) + '...' : text;
+  // Using [...text] means we can slice by character, not by byte (still fails with zero-width separators)
+  return text.length > MAX_LENGTH
+    ? [...text].slice(0, MAX_LENGTH) + '...'
+    : text;
 };
 
 export const formatTime: (timestamp: number) => string = timestamp =>

@@ -98,7 +98,7 @@ const SprintTab: React.FC<TabProps> = ({ record, fields, settings }) => {
 
   if (runIds) {
     runRows = runs.map(run => {
-      const rows = testMap[run.id];
+      const rows = testMap[run.id] ?? [];
 
       return (
         <RunRow

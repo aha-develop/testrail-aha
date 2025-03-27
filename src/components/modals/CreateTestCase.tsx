@@ -140,7 +140,7 @@ const createTestCase: (props: CreateProps) => Promise<void> = async ({
 
   const result = await waitForLambda<APIResult>({ lambdaFunc, args, eventKey });
 
-  if (result.error) {
+  if (!result || result.error) {
     setSaving(false);
     setError(true);
 
