@@ -239,16 +239,20 @@ export const waitForPagedLambda: <T>(
   let error = fetchResults.find(result => result.error)?.message;
   let hasMore = true;
 
-  // Slightly different handling because paged and unpaged results have a different structure
   if (isPaginated && usePage) {
     hasMore = fetchResults[fetchResults.length - 1].result?.hasMore;
+  } else {
+    hasMore = page <= ids.length;
+  }
+
+  // Slightly different handling because paged and unpaged results have a different structure
+  if (isPaginated) {
     results.push(
       ...fetchResults.flatMap(
         result => (result as PagedAPIResult).result?.result ?? []
       )
     );
   } else {
-    hasMore = page <= ids.length;
     results.push(
       ...fetchResults.flatMap(result => (result as APIResult).result ?? [])
     );
