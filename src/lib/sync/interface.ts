@@ -35,6 +35,12 @@ type WaitProps = {
   };
 };
 
+type IndexCallProps = {
+  eventKeys: string[];
+  lambdaFunc: (props: { [key: string]: any }) => Promise<void>;
+  argsForKeys: { [key: string]: any };
+};
+
 type IndexedWaitProps = WaitProps & {
   argFunc: (index: number) => { [key: string]: any };
   numIds: number;
@@ -331,7 +337,6 @@ export const waitForIndexedLambda: <T>(
 
   let page_concurrency = INITIAL_CONCURRENCY;
   let page = 1;
-  let fetchedPages = 1;
 
   // Required to recover in the case of a timeout
   let argsForKeys: { [key: string]: any } = {};
@@ -341,52 +346,24 @@ export const waitForIndexedLambda: <T>(
       const indexString = index.toString();
 
       if (eventKeys.length >= MAX_CONCURRENCY) {
-        fetchedPages += eventKeys.length;
+        const [newResults, newFinishedIds] = await makeIndexedCalls<T>({
+          eventKeys,
+          lambdaFunc,
+          argsForKeys,
+        });
 
-        let fetchResults = (await waitForResults(eventKeys, true)) as null | {
-          [key: string]: PagedAPIResult;
-        };
+        results.push(...newResults);
+        for (const id of newFinishedIds) finishedIds.add(id);
 
-        while (!fetchResults) {
-          for (const key of eventKeys) {
-            await lambdaFunc({
-              ...argsForKeys[key],
-              eventKey: key,
-            });
-          }
-
-          fetchResults = (await waitForResults(eventKeys, true)) as null | {
-            [key: string]: PagedAPIResult;
-          };
-        }
-
-        argsForKeys = {}; // Reset for next batch
-
-        const error = Object.values(fetchResults).find(
-          result => result.error
-        )?.message;
-
-        if (error) throw new Error(error);
-
-        for (const key in fetchResults) {
-          const result = fetchResults[key];
-
-          results.push(...(result.result?.result ?? []));
-          const hasMore = result.result?.hasMore;
-
-          if (!hasMore) {
-            const [parsedId] = key.split('-').slice(-1);
-            finishedIds.add(parsedId);
-          }
-        }
-
+        // Reset for next batch
+        argsForKeys = {};
         eventKeys = [];
       }
 
       if (finishedIds.has(indexString)) continue;
 
-      // Note we don't check for MAX_CONCURRENCY here because we want to fetch all pages for a given ID -
-      // stopping part way makes keeping track much more complicated
+      // Note we don't check for MAX_CONCURRENCY here because fetching more pages at once
+      // is more efficient overall and MAX_CONCURRENCY isn't a hard limit
       for (
         let currentPage = page;
         currentPage < page + page_concurrency;
@@ -411,48 +388,67 @@ export const waitForIndexedLambda: <T>(
     page_concurrency = PAGED_CONCURRENCY;
 
     if (eventKeys.length) {
-      fetchedPages += eventKeys.length;
+      const [newResults, newFinishedIds] = await makeIndexedCalls<T>({
+        eventKeys,
+        lambdaFunc,
+        argsForKeys,
+      });
 
-      let fetchResults = (await waitForResults(eventKeys, true)) as null | {
-        [key: string]: PagedAPIResult;
-      };
-
-      while (!fetchResults) {
-        for (const key of eventKeys) {
-          await lambdaFunc({
-            ...argsForKeys[key],
-            eventKey: key,
-          });
-        }
-
-        fetchResults = (await waitForResults(eventKeys, true)) as null | {
-          [key: string]: PagedAPIResult;
-        };
-      }
+      results.push(...newResults);
+      for (const id of newFinishedIds) finishedIds.add(id);
 
       argsForKeys = {};
-
-      const error = Object.values(fetchResults).find(
-        result => result.error
-      )?.message;
-
-      if (error) throw new Error(error);
-
-      for (const key in fetchResults) {
-        const result = fetchResults[key];
-
-        results.push(...(result.result?.result ?? []));
-        const hasMore = result.result?.hasMore;
-
-        if (!hasMore) {
-          const [parsedId] = key.split('-').slice(-1);
-          finishedIds.add(parsedId);
-        }
-      }
-
       eventKeys = [];
     }
   }
 
   return results;
+};
+
+const makeIndexedCalls: <T>(
+  props: IndexCallProps
+) => Promise<[T[], string[]]> = async <T>({
+  eventKeys,
+  lambdaFunc,
+  argsForKeys,
+}) => {
+  const results: T[] = [];
+  const finishedIds: string[] = [];
+
+  let fetchResults = (await waitForResults(eventKeys, true)) as null | {
+    [key: string]: PagedAPIResult;
+  };
+
+  while (!fetchResults) {
+    for (const key of eventKeys) {
+      await lambdaFunc({
+        ...argsForKeys[key],
+        eventKey: key,
+      });
+    }
+
+    fetchResults = (await waitForResults(eventKeys, true)) as null | {
+      [key: string]: PagedAPIResult;
+    };
+  }
+
+  const error = Object.values(fetchResults).find(
+    result => result.error
+  )?.message;
+
+  if (error) throw new Error(error);
+
+  for (const key in fetchResults) {
+    const result = fetchResults[key];
+
+    results.push(...(result.result?.result ?? []));
+    const hasMore = result.result?.hasMore;
+
+    if (!hasMore) {
+      const [parsedId] = key.split('-').slice(-1);
+      finishedIds.push(parsedId);
+    }
+  }
+
+  return [results, finishedIds];
 };
