@@ -44,7 +44,6 @@ const BulkSyncPanel: React.FC<Props> = ({
       type,
       syncDelay: -1,
       setState: updateState,
-      start: false, // Won't start a sync but will await existing syncs
     });
   }, []);
 
@@ -53,7 +52,7 @@ const BulkSyncPanel: React.FC<Props> = ({
     waitForBulkSync({
       domain,
       type,
-      syncDelay: -1,
+      syncDelay: 0,
       setState: updateState,
       getLatest: false, // Will get records prior to the latest sync
     });

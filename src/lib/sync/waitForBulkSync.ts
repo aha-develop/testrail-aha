@@ -16,7 +16,6 @@ type WaitProps = {
   syncDelay: number;
   reload?: () => void;
   type?: SyncType;
-  start?: boolean;
   getLatest?: boolean;
 };
 
@@ -26,7 +25,6 @@ const waitForBulkSync: (props: WaitProps) => Promise<void> = async ({
   domain,
   reload,
   type = SyncType.All,
-  start = true,
   getLatest = true,
 }) => {
   let state;
@@ -41,8 +39,9 @@ const waitForBulkSync: (props: WaitProps) => Promise<void> = async ({
     shouldWait = newShouldWait;
   };
 
-  // Kick off a bulk sync if not already running
-  if (start) {
+  // Kick off a bulk sync if not already running.
+  // Skips if syncDelay is negative (no auto-sync allowed)
+  if (syncDelay >= 0) {
     bulkSync({
       domain,
       type,
@@ -63,25 +62,25 @@ const waitForBulkSync: (props: WaitProps) => Promise<void> = async ({
     const syncKey = getSyncKey(type);
 
     // Only fetch state if it's not running locally and the initial state has been set
-    if (shouldWait && (state || !start)) {
+    if (shouldWait && (state || syncDelay < 0)) {
       keys.push(syncKey);
     }
 
     const values = await getAccountExtensionFieldMap(keys);
 
     // Sync hasn't started - no reason to wait
-    if (!start && !values[syncKey]) {
+    if (syncDelay < 0 && !values[syncKey]) {
       return;
     }
 
-    if (shouldWait && (state || !start) && values[syncKey]) {
+    if (shouldWait && (state || syncDelay < 0) && values[syncKey]) {
       state = values[syncKey];
       setState(state);
     }
 
     const retryAt = values['retryAt'] as number | undefined;
 
-    if (start && retryAt && retryAt > Date.now()) {
+    if (syncDelay >= 0 && retryAt && retryAt > Date.now()) {
       setState({ ...state, state: SyncState.Timeout });
       await sleep(retryAt - Date.now());
     }

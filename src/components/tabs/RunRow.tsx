@@ -19,7 +19,7 @@ type Props = {
 
 type ExpanderProps = {
   expanded: boolean;
-  onClick: (value: boolean) => void;
+  setExpanded: (updater: (state: boolean) => boolean) => void;
 };
 
 const getPassedPercentage: (
@@ -30,12 +30,16 @@ const getPassedPercentage: (
   return Math.round((passed / total) * 100);
 };
 
-const Expander: React.FC<ExpanderProps> = ({ expanded, onClick }) => {
-  const icon = expanded ? 'fa-chevron-up' : 'fa-chevron-down';
+const Expander: React.FC<ExpanderProps> = ({ expanded, setExpanded }) => {
+  const icon = expanded ? 'fa-chevron-down' : 'fa-chevron-right';
 
   return (
-    <div className='has-pointer text-gray' onClick={() => onClick(!expanded)}>
-      <aha-icon icon={`fa-regular ${icon}`} />
+    <div
+      className='has-pointer text-gray'
+      onClick={() => setExpanded(expanded => !expanded)}
+      style={{ width: '12px' }}
+    >
+      <aha-icon icon={`fa-solid ${icon}`} />
     </div>
   );
 };
@@ -77,7 +81,7 @@ const RunRow: React.FC<Props> = ({
     <div>
       <div className='run-row'>
         <div className='run-row-column'>
-          <Expander expanded={expanded} onClick={setExpanded} />
+          <Expander expanded={expanded} setExpanded={setExpanded} />
           <div className='run-stats'>
             <div className='run-title'>
               <span className='mr-2 text-light'>
