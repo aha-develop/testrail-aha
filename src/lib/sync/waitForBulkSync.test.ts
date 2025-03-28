@@ -39,7 +39,7 @@ describe('waitForBulkSync', () => {
     jest.clearAllMocks();
   });
 
-  it('starts a new sync when start=true', async () => {
+  it('starts a new sync when sync delay is >= 0', async () => {
     mockGetAccountExtensionFieldMap.mockResolvedValueOnce({});
     mockGetAccountExtensionFieldMap.mockResolvedValueOnce({
       syncKey: { state: SyncState.Complete },
@@ -57,22 +57,22 @@ describe('waitForBulkSync', () => {
     });
   });
 
-  it('does not start sync when start=false', async () => {
+  it('does not start sync when sync delay is negative', async () => {
     mockGetAccountExtensionFieldMap.mockResolvedValueOnce({
       syncKey: { state: SyncState.Complete },
     });
 
-    await waitForBulkSync({ ...defaultProps, start: false });
+    await waitForBulkSync({ ...defaultProps, syncDelay: -1 });
 
     expect(bulkSync).not.toHaveBeenCalled();
   });
 
-  it('returns early if no sync is running and start=false', async () => {
+  it('returns early if no sync is running and sync delay is negative', async () => {
     mockGetAccountExtensionFieldMap.mockResolvedValueOnce({
       retryAt: undefined,
     });
 
-    await waitForBulkSync({ ...defaultProps, start: false });
+    await waitForBulkSync({ ...defaultProps, syncDelay: -1 });
 
     expect(sleep).toHaveBeenCalledTimes(1);
     expect(mockSetState).not.toHaveBeenCalled();
