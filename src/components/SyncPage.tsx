@@ -31,9 +31,9 @@ const SyncPage: React.FC<{ domain: string }> = ({ domain }) => {
         <div className='sync-background'>
           <div className='sync-page'>
             <div className='mb-4'>
-              <div className='h-500'>TestRail Data Sync</div>
+              <div className='h-500'>TestRail data sync</div>
               <div className='mt-2'>
-                Check the sync status and manually re-sync records from TestRail
+                Check the sync status and manually resync records from TestRail
                 to ensure your data is up to date in Aha! Roadmaps.
               </div>
             </div>
@@ -81,9 +81,9 @@ const SyncPage: React.FC<{ domain: string }> = ({ domain }) => {
               setDisabled={setDisabled}
             >
               <div>
-                This sync ensures all test-related records are fully up-to-date.
-                Includes syncing projects, test runs, test plans, and tests.
-                This process may take some time, depending on the volume of
+                This sync ensures all test-related records are fully up to date
+                (including syncing projects, test runs, test plans, and tests).
+                The process could take some time depending on the volume of
                 data.
               </div>
             </BulkSyncPanel>
@@ -106,15 +106,15 @@ const SyncPage: React.FC<{ domain: string }> = ({ domain }) => {
             <BulkSyncPanel
               domain={domain}
               type={SyncType.All}
-              title='Full TestRail re-sync'
+              title='Full TestRail data resync'
               disabled={disabled}
               setDisabled={setDisabled}
             >
               <div>
                 Use this option only when troubleshooting major issues with
-                missing or outdated data. Running a full sync will re-sync all
-                records from TestRail, which may take a significant amount of
-                time.
+                outdated or missing data. Running a full sync will resync all
+                records from TestRail, which might take some time depending on
+                the volume of data.
               </div>
             </BulkSyncPanel>
           </div>

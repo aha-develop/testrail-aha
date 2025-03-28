@@ -60,8 +60,8 @@ export const showError: (msg: string) => void = msg => {
 
 export const showSyncWarning: () => void = () => {
   showMessage(
-    'You can navigate in other tabs, but do not close this page or refresh it until the sync is finished.',
+    'You can navigate to other tabs, but do not close this page or refresh it until the sync finishes.',
     'warning',
-    'You must remain on the page while the sync completes.'
+    'You must remain on this page while the sync completes.'
   );
 };
