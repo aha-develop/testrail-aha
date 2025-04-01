@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
-import { TestCase, Test, Status } from '../../extension';
+import { TestCase, TestRun, Test, Status } from '../../extension';
 import {
   getRecords,
   getLinkedComments,
+  getRunRowData,
 } from '../../lib/extensionFields/queries';
 import { timeAgo } from '../../lib/util';
 import { Styles } from '../Styles';
+import LinkTestRun from '../modals/LinkTestRun';
 import LinkTestCase from '../modals/LinkTestCase';
 import LinkTest from '../modals/LinkTest';
 import CreateTestCase from '../modals/CreateTestCase';
@@ -13,6 +15,7 @@ import { ExtensionRecord } from '../../lib/extensionRecord';
 import { BulkSyncState, SyncState } from '../../lib/sync/bulkSync';
 import waitForBulkSync from '../../lib/sync/waitForBulkSync';
 import TestRow from './TestRow';
+import RunRow from './RunRow';
 
 type TabProps = {
   record: ExtensionRecord;
@@ -20,29 +23,43 @@ type TabProps = {
   settings: Aha.Settings;
 };
 
+type TestMap = { [runId: number]: [TestCase, Test][] };
+
 type FeatureTabData = {
   testCases: TestCase[];
   tests: { [caseId: number]: Test };
   comments: { [testId: number]: { timestamp: number; comment: string } };
   statuses: { [key: string]: Status };
+  runs: TestRun[];
+  runTestMap: TestMap;
 };
 
 const getFeatureTabData: (
   caseIds: number[],
+  runIds: number[],
   testIds: number[]
-) => Promise<FeatureTabData> = async (caseIds, testIds) => {
+) => Promise<FeatureTabData> = async (caseIds, runIds, testIds) => {
   const testCases = await getRecords<TestCase>(caseIds, 'TestCase');
-  const tests = await getRecords<Test>(testIds, 'Test');
+  const runs = await getRecords<TestRun>(runIds, 'TestRun');
+  const linkedTests = await getRecords<Test>(testIds, 'Test');
 
-  const testMap = tests.reduce(
+  const testMap = linkedTests.reduce(
     (acc, test) => ({ ...acc, [test.caseId]: test }),
     {}
   );
 
-  const commentMap = await getLinkedComments(tests);
+  const [runTestMap, runTests] = await getRunRowData(runIds);
 
-  const statusIds = tests.map(test => test.statusId);
-  const statuses = await getRecords<Status>(statusIds, 'Status');
+  const testIdSet = new Set(runTests.map(test => test.id));
+  const statusIds = new Set(runTests.map(test => test.statusId));
+
+  for (const test of linkedTests) {
+    testIdSet.add(test.id);
+    statusIds.add(test.statusId);
+  }
+
+  const commentMap = await getLinkedComments([...testIdSet]);
+  const statuses = await getRecords<Status>([...statusIds], 'Status');
   const statusMap = statuses.reduce((acc, status) => {
     acc[status.id] = status;
     return acc;
@@ -50,6 +67,8 @@ const getFeatureTabData: (
 
   return {
     testCases,
+    runs,
+    runTestMap,
     tests: testMap,
     comments: commentMap,
     statuses: statusMap,
@@ -58,12 +77,14 @@ const getFeatureTabData: (
 
 const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   const caseIds = fields['caseIds'] as number[] | undefined;
+  const runIds = fields['runIds'] as number[] | undefined;
   const testIds = fields['testIds'] as number[] | undefined;
 
   const [loading, setLoading] = useState(true);
   const [syncData, setSyncData] = useState<BulkSyncState>(null);
   const [tabData, setTabData] = useState<FeatureTabData>(null);
 
+  const [linkRunModalOpen, setLinkRunModalOpen] = useState(false);
   const [linkCaseModalOpen, setLinkCaseModalOpen] = useState(false);
   const [linkTestModalOpen, setLinkTestModalOpen] = useState(false);
   const [createCaseModalOpen, setCreateCaseModalOpen] = useState(false);
@@ -80,14 +101,14 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
 
   useEffect(() => {
     const initData = async () => {
-      const tabData = await getFeatureTabData(caseIds, testIds);
+      const tabData = await getFeatureTabData(caseIds, runIds, testIds);
 
       setTabData(tabData);
       setLoading(false);
     };
 
     initData();
-  }, [caseIds, testIds, reload]);
+  }, [caseIds, runIds, testIds, reload]);
 
   useEffect(() => {
     waitForBulkSync({
@@ -99,13 +120,17 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   }, []);
 
   let caseRows = null;
+  let runRows = null;
 
-  const { testCases, tests, comments, statuses } = tabData || {
-    testCases: [],
-    tests: {},
-    comments: {},
-    statuses: {},
-  };
+  const { testCases, runs, runTestMap, tests, comments, statuses } =
+    tabData || {
+      testCases: [],
+      runs: [],
+      runTestMap: {},
+      tests: {},
+      comments: {},
+      statuses: {},
+    };
 
   if (caseIds) {
     caseRows = testCases.map(testCase => {
@@ -123,6 +148,24 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
           record={record}
           domain={domain}
           syncData={syncData}
+        />
+      );
+    });
+  }
+
+  if (runIds) {
+    runRows = runs.map(run => {
+      const rows = runTestMap[run.id] ?? [];
+
+      return (
+        <RunRow
+          key={`run-${run.id}`}
+          run={run}
+          rows={rows}
+          comments={comments}
+          statuses={statuses}
+          record={record}
+          domain={domain}
         />
       );
     });
@@ -149,6 +192,12 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
             </aha-button>
             <aha-menu-content>
               <aha-menu-item>
+                <a onClick={() => setLinkRunModalOpen(true)}>
+                  <aha-icon icon='fa-regular fa-link' />
+                  Link a test run
+                </a>
+              </aha-menu-item>
+              <aha-menu-item>
                 <a onClick={() => setLinkTestModalOpen(true)}>
                   <aha-icon icon='fa-regular fa-link' />
                   Link a test
@@ -170,6 +219,14 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
             Create a test case
           </aha-button>
         </div>
+        {linkRunModalOpen && (
+          <LinkTestRun
+            record={record}
+            runIds={runIds}
+            syncData={syncData}
+            onClose={() => setLinkRunModalOpen(false)}
+          />
+        )}
         {linkCaseModalOpen && (
           <LinkTestCase
             record={record}
@@ -226,7 +283,16 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
           )}
         </div>
       </div>
-      <div>{loading ? <aha-loading-row rows={5} columns={2} /> : caseRows}</div>
+      {loading ? (
+        <div>
+          <aha-loading-row rows={5} columns={2} />
+        </div>
+      ) : (
+        <>
+          <div className='run-rows mb-3'>{runRows}</div>
+          <div>{caseRows}</div>
+        </>
+      )}
     </>
   );
 };

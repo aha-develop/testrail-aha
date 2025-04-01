@@ -11,11 +11,12 @@ import {
 
 const mockGetExtensionField = jest.fn();
 const mockSetExtensionField = jest.fn();
+const mockSetExtensionFields = jest.fn();
 
 (global as any).aha = {
   account: {
     getExtensionField: mockGetExtensionField,
-    setExtensionField: mockSetExtensionField,
+    setExtensionFields: mockSetExtensionFields,
   },
 };
 
@@ -106,10 +107,12 @@ describe('unlinkRecord', () => {
 describe('saveRecords', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockGetExtensionField.mockResolvedValue([3, 4]);
+    mockGetExtensionMap.mockResolvedValue({
+      project_100_caseIds: [3, 4],
+    });
   });
 
-  it('saves records and updates the appropriate index', async () => {
+  it('saves records and updates the appropriate indices', async () => {
     const records: TestCase[] = [
       {
         kind: 'TestCase',
@@ -122,8 +125,8 @@ describe('saveRecords', () => {
       {
         kind: 'TestCase',
         id: 2,
-        projectId: 100,
-        suiteId: 1,
+        projectId: 200,
+        suiteId: 2,
         title: 'Case 2',
         createdOn: 0,
       },
@@ -131,35 +134,26 @@ describe('saveRecords', () => {
 
     await saveRecords(records);
 
-    expect(mockSetExtensionField).toHaveBeenCalledWith(
-      IDENTIFIER,
-      'case_1',
-      records[0]
-    );
+    expect(mockSetExtensionFields).toHaveBeenNthCalledWith(1, IDENTIFIER, {
+      case_1: records[0],
+      case_2: records[1],
+    });
 
-    expect(mockSetExtensionField).toHaveBeenCalledWith(
-      IDENTIFIER,
-      'case_2',
-      records[1]
-    );
-
-    expect(mockSetExtensionField).toHaveBeenCalledWith(
-      IDENTIFIER,
-      'project_100_caseIds',
-      [3, 4, 1, 2]
-    );
+    expect(mockSetExtensionFields).toHaveBeenNthCalledWith(2, IDENTIFIER, {
+      project_100_caseIds: [3, 4, 1],
+      project_200_caseIds: [2],
+    });
   });
 
   it('does nothing with empty records array', async () => {
     await saveRecords([]);
-    expect(mockSetExtensionField).not.toHaveBeenCalled();
+    expect(mockSetExtensionFields).not.toHaveBeenCalled();
   });
 });
 
 describe('saveNewRuns', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockGetExtensionField.mockResolvedValue([3, 4]);
   });
 
   it('saves only non-completed runs', async () => {
@@ -184,9 +178,13 @@ describe('saveNewRuns', () => {
       },
     ];
 
-    mockGetExtensionMap.mockResolvedValue({
+    mockGetExtensionMap.mockResolvedValueOnce({
       run_1: { completed: false },
       run_2: { completed: true },
+    });
+
+    mockGetExtensionMap.mockResolvedValueOnce({
+      project_100_runIds: [3, 4],
     });
 
     const result = await saveNewRuns(runs);
@@ -194,24 +192,20 @@ describe('saveNewRuns', () => {
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe(1);
 
-    expect(mockSetExtensionField).toHaveBeenCalledWith(
-      IDENTIFIER,
-      'run_1',
-      runs[0]
-    );
+    expect(mockSetExtensionFields).toHaveBeenNthCalledWith(1, IDENTIFIER, {
+      run_1: runs[0],
+    });
 
-    expect(mockSetExtensionField).toHaveBeenCalledWith(
-      IDENTIFIER,
-      'project_100_runIds',
-      [3, 4, 1]
-    );
+    expect(mockSetExtensionFields).toHaveBeenNthCalledWith(2, IDENTIFIER, {
+      project_100_runIds: [3, 4, 1],
+    });
   });
 
   it('returns empty array for empty input', async () => {
     const result = await saveNewRuns([]);
 
     expect(result).toEqual([]);
-    expect(mockSetExtensionField).not.toHaveBeenCalled();
+    expect(mockSetExtensionFields).not.toHaveBeenCalled();
   });
 });
 
@@ -244,11 +238,9 @@ describe('linkResultsToTests', () => {
 
     await linkResultsToTests(results);
 
-    expect(mockSetExtensionField).toHaveBeenCalledWith(
-      IDENTIFIER,
-      'test_100_comment',
-      { timestamp: 200, comment: 'Second' }
-    );
+    expect(mockSetExtensionFields).toHaveBeenCalledWith(IDENTIFIER, {
+      test_100_comment: { timestamp: 200, comment: 'Second' },
+    });
   });
 
   it('does not update when existing comment is more recent', async () => {
@@ -268,6 +260,6 @@ describe('linkResultsToTests', () => {
 
     await linkResultsToTests(results);
 
-    expect(mockSetExtensionField).not.toHaveBeenCalled();
+    expect(mockSetExtensionFields).not.toHaveBeenCalled();
   });
 });

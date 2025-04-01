@@ -171,22 +171,22 @@ export const getProjectSuiteMapping: (
   return projectSuites;
 };
 
-export const getLinkedComments: (tests: Test[]) => Promise<{
+export const getLinkedComments: (ids: number[]) => Promise<{
   [testId: number]: { comment: string; timestamp: number };
-}> = async tests => {
-  const commentKey = test => `${fieldName('Test', test.id)}_comment`;
+}> = async ids => {
+  const commentKey = id => `${fieldName('Test', id)}_comment`;
 
-  const keys = tests.map(test => commentKey(test));
+  const keys = ids.map(id => commentKey(id));
 
   const commentLinks = await getAccountExtensionFieldMap<{
     timestamp: number;
     comment: string;
   }>(keys);
 
-  return tests.reduce(
-    (result, test, i) => ({
+  return ids.reduce(
+    (result, id) => ({
       ...result,
-      [test.id]: commentLinks[commentKey(test)],
+      [id]: commentLinks[commentKey(id)],
     }),
     {}
   );

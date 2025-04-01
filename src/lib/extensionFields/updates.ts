@@ -11,6 +11,8 @@ import {
   getAccountExtensionFieldMap,
 } from './queries';
 
+const MAX_FIELDS_PER_SAVE = 500;
+
 export const linkRecord: (
   record: ExtensionRecord,
   id: number,
@@ -48,14 +50,13 @@ export const saveRecords: <T extends TestRailRecord>(
 ) => Promise<void> = async records => {
   if (records.length === 0) return;
 
+  const fields = [];
+
   for (const record of records) {
-    await aha.account.setExtensionField(
-      IDENTIFIER,
-      fieldName(record.kind, record.id),
-      record
-    );
+    fields.push([fieldName(record.kind, record.id), record]);
   }
 
+  await saveChunked(fields);
   await updateRecordIndexes(records);
 };
 
@@ -96,25 +97,20 @@ const updateRecordIndexes: <T extends TestRailRecord>(
     keyMap[indexKey].push(record);
   }
 
-  for (const key in keyMap) {
-    await updateIndex(key, keyMap[key]);
-  }
-};
-
-const updateIndex: <T extends TestRailRecord>(
-  key: string,
-  records: T[]
-) => Promise<void> = async (key, records) => {
-  const allIds =
-    (await aha.account.getExtensionField<number[]>(IDENTIFIER, key)) ?? [];
-
-  allIds.push(...records.map(record => record.id));
-
-  await aha.account.setExtensionField(
-    IDENTIFIER,
-    key,
-    Array.from(new Set(allIds))
+  const existingIndexes = await getAccountExtensionFieldMap<number[]>(
+    Object.keys(keyMap)
   );
+
+  const fields = [];
+
+  for (const key in keyMap) {
+    let allIds = existingIndexes[key] ?? [];
+    allIds.push(...keyMap[key].map(record => record.id));
+
+    fields.push([key, Array.from(new Set(allIds))]);
+  }
+
+  await saveChunked(fields);
 };
 
 export const linkResultsToTests = async (results: TestResult[]) => {
@@ -135,6 +131,9 @@ export const linkResultsToTests = async (results: TestResult[]) => {
     comment: string;
   }>(Object.keys(keyMap));
 
+  const fields: [string, { timestamp: number; comment: string }][] = [];
+  let shouldUpdate = false;
+
   for (const key in keyMap) {
     let best = commentLinks[key];
     let unchanged = true;
@@ -153,6 +152,22 @@ export const linkResultsToTests = async (results: TestResult[]) => {
 
     if (unchanged) continue;
 
-    await aha.account.setExtensionField(IDENTIFIER, key, best);
+    shouldUpdate = true;
+    fields.push([key, best]);
+  }
+
+  if (!shouldUpdate) return;
+
+  await saveChunked(fields);
+};
+
+const saveChunked: (
+  fields: [string, any][]
+) => Promise<void> = async fields => {
+  for (let i = 0; i < fields.length; i += MAX_FIELDS_PER_SAVE) {
+    const chunk = fields.slice(i, i + MAX_FIELDS_PER_SAVE);
+    const chunkFields = Object.fromEntries(chunk);
+
+    await aha.account.setExtensionFields(IDENTIFIER, chunkFields);
   }
 };

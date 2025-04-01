@@ -34,7 +34,7 @@ const getSprintTabData: (
   const runs = await getRecords<TestRun>(runIds, 'TestRun');
   const [testMap, tests] = await getRunRowData(runIds);
 
-  const commentMap = await getLinkedComments(tests);
+  const commentMap = await getLinkedComments(tests.map(test => test.id));
 
   const statusIds = tests.map(test => test.statusId);
   const statuses = await getRecords<Status>(statusIds, 'Status');

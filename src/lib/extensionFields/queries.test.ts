@@ -292,10 +292,7 @@ describe('getLinkedComments', () => {
   });
 
   it('maps comments to test IDs correctly', async () => {
-    const tests: Test[] = [
-      { id: 1, kind: 'Test', caseId: 1, runId: 1, statusId: 1 },
-      { id: 2, kind: 'Test', caseId: 2, runId: 2, statusId: 1 },
-    ];
+    const ids = [1, 2];
 
     const mockComments = {
       test_1_comment: { timestamp: 123, comment: 'Comment 1' },
@@ -307,7 +304,7 @@ describe('getLinkedComments', () => {
       { name: 'test_2_comment', value: mockComments['test_2_comment'] },
     ]);
 
-    const result = await getLinkedComments(tests);
+    const result = await getLinkedComments(ids);
 
     expect(result).toEqual({
       1: mockComments['test_1_comment'],
