@@ -11,17 +11,20 @@ import {
 
 const mockGetExtensionField = jest.fn();
 const mockSetExtensionField = jest.fn();
+const mockSetExtensionFields = jest.fn();
 
 (global as any).aha = {
   account: {
     getExtensionField: mockGetExtensionField,
     setExtensionField: mockSetExtensionField,
+    setExtensionFields: mockSetExtensionFields,
   },
 };
 
 const mockRecord = {
   getExtensionField: mockGetExtensionField,
   setExtensionField: mockSetExtensionField,
+  setExtensionFields: mockSetExtensionFields,
 } as unknown as ExtensionRecord;
 
 jest.mock('./queryExtensionFields', () => ({
@@ -131,17 +134,10 @@ describe('saveRecords', () => {
 
     await saveRecords(records);
 
-    expect(mockSetExtensionField).toHaveBeenCalledWith(
-      IDENTIFIER,
-      'case_1',
-      records[0]
-    );
-
-    expect(mockSetExtensionField).toHaveBeenCalledWith(
-      IDENTIFIER,
-      'case_2',
-      records[1]
-    );
+    expect(mockSetExtensionFields).toHaveBeenCalledWith(IDENTIFIER, {
+      case_1: records[0],
+      case_2: records[1],
+    });
 
     expect(mockSetExtensionField).toHaveBeenCalledWith(
       IDENTIFIER,
@@ -153,6 +149,7 @@ describe('saveRecords', () => {
   it('does nothing with empty records array', async () => {
     await saveRecords([]);
     expect(mockSetExtensionField).not.toHaveBeenCalled();
+    expect(mockSetExtensionFields).not.toHaveBeenCalled();
   });
 });
 
@@ -194,11 +191,9 @@ describe('saveNewRuns', () => {
     expect(result).toHaveLength(1);
     expect(result[0].id).toBe(1);
 
-    expect(mockSetExtensionField).toHaveBeenCalledWith(
-      IDENTIFIER,
-      'run_1',
-      runs[0]
-    );
+    expect(mockSetExtensionFields).toHaveBeenCalledWith(IDENTIFIER, {
+      run_1: runs[0],
+    });
 
     expect(mockSetExtensionField).toHaveBeenCalledWith(
       IDENTIFIER,
@@ -212,6 +207,7 @@ describe('saveNewRuns', () => {
 
     expect(result).toEqual([]);
     expect(mockSetExtensionField).not.toHaveBeenCalled();
+    expect(mockSetExtensionFields).not.toHaveBeenCalled();
   });
 });
 
@@ -244,11 +240,10 @@ describe('linkResultsToTests', () => {
 
     await linkResultsToTests(results);
 
-    expect(mockSetExtensionField).toHaveBeenCalledWith(
-      IDENTIFIER,
-      'test_100_comment',
-      { timestamp: 200, comment: 'Second' }
-    );
+    expect(mockSetExtensionField).not.toHaveBeenCalled();
+    expect(mockSetExtensionFields).toHaveBeenCalledWith(IDENTIFIER, {
+      test_100_comment: { timestamp: 200, comment: 'Second' },
+    });
   });
 
   it('does not update when existing comment is more recent', async () => {
@@ -268,6 +263,6 @@ describe('linkResultsToTests', () => {
 
     await linkResultsToTests(results);
 
-    expect(mockSetExtensionField).not.toHaveBeenCalled();
+    expect(mockSetExtensionFields).not.toHaveBeenCalled();
   });
 });

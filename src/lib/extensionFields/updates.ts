@@ -48,14 +48,13 @@ export const saveRecords: <T extends TestRailRecord>(
 ) => Promise<void> = async records => {
   if (records.length === 0) return;
 
+  const fieldsToSave = {};
+
   for (const record of records) {
-    await aha.account.setExtensionField(
-      IDENTIFIER,
-      fieldName(record.kind, record.id),
-      record
-    );
+    fieldsToSave[fieldName(record.kind, record.id)] = record;
   }
 
+  await aha.account.setExtensionFields(IDENTIFIER, fieldsToSave);
   await updateRecordIndexes(records);
 };
 
@@ -135,6 +134,9 @@ export const linkResultsToTests = async (results: TestResult[]) => {
     comment: string;
   }>(Object.keys(keyMap));
 
+  const fields = {};
+  let shouldUpdate = false;
+
   for (const key in keyMap) {
     let best = commentLinks[key];
     let unchanged = true;
@@ -153,6 +155,10 @@ export const linkResultsToTests = async (results: TestResult[]) => {
 
     if (unchanged) continue;
 
-    await aha.account.setExtensionField(IDENTIFIER, key, best);
+    shouldUpdate = true;
+    fields[key] = best;
   }
+
+  if (!shouldUpdate) return;
+  await aha.account.setExtensionFields(IDENTIFIER, fields);
 };
