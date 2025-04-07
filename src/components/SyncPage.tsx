@@ -24,7 +24,7 @@ const SyncPage: React.FC<{ domain: string }> = ({ domain }) => {
         <div className='page-nav'>
           <div className='page-nav__row  page-nav__row--justify-left page-nav__row--align-top'>
             <div className='page-nav__cell'>
-              <h1>TestRail Connection</h1>
+              <h1>TestRail connection</h1>
             </div>
           </div>
         </div>

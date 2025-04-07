@@ -6,7 +6,7 @@ It provides these contributions:
 
 - `Tests tab (on features/reqs)` - Manages automatic syncing of TestRail data, allows linking of test cases and tests and creation of new test cases.
 - `Tests tab (on sprints)` - Manages automatic syncing and allows linking test runs to sprints.
-- `TestRail Connection page` - Allows for finer-grained control of TestRail data sync, such as loading new projects and suites. Under the 'Work' menu item.
+- `TestRail connection page` - Allows for finer-grained control of TestRail data sync, such as loading new projects and suites. Under the 'Work' menu item.
 - `Sync events` - The 10 syncing events are called by the connection page and auto-sync to fetch data from TestRail
 - `Create Test Case event` - Calls the TestRail API to create new test cases
 
@@ -47,7 +47,7 @@ It provides these contributions:
    - (Optional) Adjust the automatic sync delay field. This controls how often auto-sync will run when you visit the tests tab. It defaults to 1 hour (3600 seconds) since the last successful sync.
 
 4. Run initial sync.
-   - In Aha!, go to Work -> TestRail Connection. Click 'Sync all' next to 'Full TestRail re-sync'.
+   - In Aha!, go to Work -> TestRail connection. Click 'Sync all' next to 'Full TestRail re-sync'.
    - You can also trigger initial sync by visiting the tests tab on any feature, requirement or sprint.
    - Do not leave or refresh the page while initial sync is running, or it will restart. You can safely work in other tabs while it is running.
 
