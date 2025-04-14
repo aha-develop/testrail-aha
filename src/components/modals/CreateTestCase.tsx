@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { IDENTIFIER, Project, Section, TestCase } from '../../extension';
+import { IDENTIFIER, Project, Section, Suite, TestCase } from '../../extension';
 import { ExtensionRecord } from '../../lib/extensionRecord';
 import SearchByName, { TreeNode } from './SearchByName';
 import {
@@ -31,13 +31,15 @@ type CreateProps = {
 
 const sectionOptions: (
   projects: Project[],
+  suiteMapping: { [projectId: string]: Suite[] },
   sectionMapping: {
     [projectId: string]: Section[];
   }
-) => TreeNode[] = (projects, sectionMapping) => {
+) => TreeNode[] = (projects, suiteMapping, sectionMapping) => {
   const options: TreeNode[] = [];
-
   const sectionTree: { [sectionId: string]: Section[] } = {};
+
+  const suiteSectionMapping: { [suiteId: string]: Section[] } = {};
 
   const mapChildren: (section: Section) => TreeNode[] | null = section => {
     const children = sectionTree[section.id];
@@ -45,13 +47,19 @@ const sectionOptions: (
     if (!children) return null;
 
     return children.map(child => ({
-      text: child.name,
+      text: `${child.name}`,
       value: `${child.id}`,
       children: mapChildren(child),
     }));
   };
 
   for (const section of Object.values(sectionMapping).flat()) {
+    if (!suiteSectionMapping[section.suiteId]) {
+      suiteSectionMapping[section.suiteId] = [];
+    }
+
+    suiteSectionMapping[section.suiteId].push(section);
+
     if (section.parentId === null) {
       continue;
     }
@@ -64,31 +72,55 @@ const sectionOptions: (
   }
 
   for (const project of projects) {
-    const sections = sectionMapping[project.id] || [];
-
-    if (sections.length === 0) continue;
-
     const children = [];
+    const projectSuites = suiteMapping[project.id] || [];
 
-    for (const section of sections) {
-      if (sectionTree[section.parentId]) continue;
+    if (projectSuites.length === 0) continue;
 
-      children.push({
-        text: section.name,
-        value: `${section.id}`,
-        children: mapChildren(section),
-      });
+    for (const suite of projectSuites) {
+      const sections = suiteSectionMapping[suite.id] || [];
+
+      if (sections.length === 0) continue;
+
+      const suiteChildren = [];
+
+      for (const section of sections) {
+        if (sectionTree[section.parentId]) continue;
+
+        suiteChildren.push({
+          text: `${section.name}`,
+          value: `${section.id}`,
+          children: mapChildren(section),
+        });
+      }
+
+      if (suiteChildren.length === 0) continue;
+
+      // Handle default suite - shouldn't render
+      if (suite.name === 'Master') {
+        children.push(...suiteChildren);
+      } else {
+        const suiteHeader: TreeNode = {
+          value: suite.id.toString(),
+          text: suite.name,
+          header: true,
+          children: suiteChildren,
+        };
+
+        children.push(suiteHeader);
+      }
     }
 
     if (children.length === 0) continue;
 
-    const header: TreeNode = {
+    const projectHeader: TreeNode = {
       value: project.id.toString(),
       text: project.name,
+      header: true,
       children,
     };
 
-    options.push(header);
+    options.push(projectHeader);
   }
 
   return options;
@@ -110,7 +142,7 @@ const findChild: (node: TreeNode, value: string) => boolean = (node, value) => {
   return false;
 };
 
-const createTestCase: (props: CreateProps) => Promise<void> = async ({
+const createTestCase: (props: CreateProps) => Promise<boolean> = async ({
   record,
   domain,
   title,
@@ -144,7 +176,7 @@ const createTestCase: (props: CreateProps) => Promise<void> = async ({
     setSaving(false);
     setError(true);
 
-    return;
+    return false;
   }
 
   const testCase = result.result as TestCase;
@@ -154,6 +186,8 @@ const createTestCase: (props: CreateProps) => Promise<void> = async ({
   await linkRecord(record, testCase.id, 'caseIds');
 
   setSaving(false);
+
+  return true;
 };
 
 const CreateTestCase: React.FC<Props> = ({
@@ -189,7 +223,7 @@ const CreateTestCase: React.FC<Props> = ({
   };
 
   const submit = async () => {
-    await createTestCase({
+    const result = await createTestCase({
       domain,
       record,
       title: titleRef.current.value,
@@ -199,7 +233,7 @@ const CreateTestCase: React.FC<Props> = ({
       setError,
     });
 
-    onClose();
+    if (result) onClose();
   };
 
   useEffect(() => {
@@ -209,12 +243,13 @@ const CreateTestCase: React.FC<Props> = ({
         'projectIds'
       );
 
-      const [sectionMapping, projects] = await Promise.all([
+      const [sectionMapping, suiteMapping, projects] = await Promise.all([
         getProjectRecords<Section>(projectIds, 'Section'),
+        getProjectRecords<Suite>(projectIds, 'Suite'),
         getRecords<Project>(projectIds, 'Project'),
       ]);
 
-      setSectionTree(sectionOptions(projects, sectionMapping));
+      setSectionTree(sectionOptions(projects, suiteMapping, sectionMapping));
       setLoading(false);
     };
 
