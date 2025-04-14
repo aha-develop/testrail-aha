@@ -1,7 +1,7 @@
 {
   "name": "aha-develop.testrail",
   "description": "TestRail",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "author": "Aha! (support@aha.io)",
   "repository": {
     "type": "git",
