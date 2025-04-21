@@ -7,6 +7,8 @@ const GQL_BATCH_SIZE = 500;
 const queryExtensionFields: (
   names: string[]
 ) => Promise<Aha.ExtensionField[]> = async (names: string[]) => {
+  if (!names || names.length === 0) return [];
+
   const results = await aha.models.ExtensionField.select('name', 'value')
     .where({
       names: names,
