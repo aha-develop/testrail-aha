@@ -20,7 +20,7 @@ const syncCases: (props: SyncProps) => Promise<TestCase[]> = async ({
 
   const now = Date.now();
 
-  let eventKey = `syncCases-${Date.now()}`;
+  let eventKey = `syncCases-${now}`;
   const args = { domain };
 
   const lambdaArgs = [];

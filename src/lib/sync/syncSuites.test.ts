@@ -1,10 +1,10 @@
 import { IDENTIFIER } from '../../extension';
-import { waitForPagedLambda } from './interface';
+import { waitForIndexedLambda } from './interface';
 import { saveRecords } from '../extensionFields/updates';
 import syncSuites from './syncSuites';
 
 jest.mock('./interface', () => ({
-  waitForPagedLambda: jest.fn(),
+  waitForIndexedLambda: jest.fn(),
 }));
 
 jest.mock('../extensionFields/updates', () => ({
@@ -19,7 +19,7 @@ const mockSetExtensionField = jest.fn();
   triggerServer: jest.fn(),
 };
 
-const mockWaitPaged = waitForPagedLambda as jest.Mock;
+const mockWaitIndexed = waitForIndexedLambda as jest.Mock;
 
 describe('syncSuites', () => {
   beforeEach(() => {
@@ -54,18 +54,16 @@ describe('syncSuites', () => {
       },
     ];
 
-    mockWaitPaged.mockResolvedValue(mockSuites);
+    mockWaitIndexed.mockResolvedValue(mockSuites);
 
     const result = await syncSuites({ domain: 'test', projectIds: [100] });
 
-    expect(waitForPagedLambda).toHaveBeenCalledWith({
+    expect(waitForIndexedLambda).toHaveBeenCalledWith({
       lambdaFunc: expect.any(Function),
+      argFunc: expect.any(Function),
       args: { domain: 'test' },
       eventKey: expect.stringContaining('syncSuites-'),
-      usePage: false,
-      isPaginated: false,
-      idKey: 'projectId',
-      ids: [100],
+      numIds: 1,
     });
 
     expect(saveRecords).toHaveBeenCalledWith(mockSuites);
@@ -94,21 +92,19 @@ describe('syncSuites', () => {
       },
     ];
 
-    mockWaitPaged.mockResolvedValue(mockSuites);
+    mockWaitIndexed.mockResolvedValue(mockSuites);
 
     const result = await syncSuites({
       domain: 'test',
       projectIds: [100, 101],
     });
 
-    expect(waitForPagedLambda).toHaveBeenCalledWith({
+    expect(waitForIndexedLambda).toHaveBeenCalledWith({
       lambdaFunc: expect.any(Function),
+      argFunc: expect.any(Function),
       args: { domain: 'test' },
       eventKey: expect.stringContaining('syncSuites-'),
-      usePage: false,
-      isPaginated: false,
-      idKey: 'projectId',
-      ids: [100, 101],
+      numIds: 2,
     });
 
     expect(saveRecords).toHaveBeenCalledWith(mockSuites);
@@ -122,7 +118,7 @@ describe('syncSuites', () => {
   });
 
   it('handles empty suite list', async () => {
-    mockWaitPaged.mockResolvedValue([]);
+    mockWaitIndexed.mockResolvedValue([]);
 
     const result = await syncSuites({ domain: 'test', projectIds: [100] });
 

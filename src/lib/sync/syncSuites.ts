@@ -1,5 +1,5 @@
 import { IDENTIFIER, Suite } from '../../extension';
-import { BaseSyncProps, waitForPagedLambda } from './interface';
+import { BaseSyncProps, waitForIndexedLambda } from './interface';
 import { saveRecords } from '../extensionFields/updates';
 
 type SyncProps = BaseSyncProps & {
@@ -17,18 +17,20 @@ const syncSuites: (props: SyncProps) => Promise<Suite[]> = async ({
   const now = Date.now();
   const eventKey = `syncSuites-${now}`;
 
+  const args = { domain };
+
   const lambdaFunc = async args => {
     await aha.triggerServer(`${IDENTIFIER}.syncSuites`, args);
   };
 
-  const suites = await waitForPagedLambda<Suite>({
+  const argFunc = (index: number) => ({ projectId: projectIds[index] });
+
+  const suites = await waitForIndexedLambda<Suite>({
     lambdaFunc,
-    args: { domain },
+    args,
     eventKey,
-    usePage: false,
-    isPaginated: false,
-    idKey: 'projectId',
-    ids: projectIds,
+    argFunc,
+    numIds: projectIds.length,
   });
 
   await saveRecords<Suite>(suites);

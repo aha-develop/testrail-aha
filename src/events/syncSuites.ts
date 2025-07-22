@@ -4,6 +4,7 @@ import { truncate } from '../lib/util';
 
 type SuiteProps = BaseParams & {
   projectId: string;
+  page?: number;
 };
 
 // Although some projects only have a single suite, we still fetch them
@@ -13,38 +14,41 @@ const syncSuites: (props: SuiteProps) => void = async ({
   record,
   eventKey,
   projectId,
+  page,
 }) => {
   try {
-    console.log(`Beginning sync of TestRail suites for project: ${projectId}`);
+    console.log(
+      `Beginning sync of TestRail suites for project: ${projectId} page: ${page}`
+    );
+
+    const params = `&offset=${page ? (page - 1) * 250 : 0}`;
 
     const json = await fetchTestRail({
       domain,
       record,
       eventKey,
-      path: `get_suites/${projectId}`,
+      path: `get_suites/${projectId}${params}`,
     });
 
     if (!json) return; // Error already logged
 
-    const suites = [] as Suite[];
-
-    for (const suite of json) {
-      if (suite.is_completed) continue; // Skip completed (archived) suites - can't be filtered in the request
-
-      suites.push({
+    const suites: Suite[] = json.suites
+      .filter(suite => !suite.is_completed)
+      .map(suite => ({
         id: suite.id,
         kind: 'Suite',
-        name: truncate(suite.name),
         projectId: suite.project_id,
-      });
-    }
+        name: truncate(suite.name),
+      }));
+
+    const hasMore = json['_links']?.next !== null;
 
     await logResult({
       record,
       eventKey,
       error: false,
-      result: suites,
-      message: `Successfully fetched ${suites.length} suites`,
+      result: { result: suites, hasMore },
+      message: `Successfully fetched ${suites.length} test suites`,
     });
   } catch (error) {
     await logResult({
@@ -60,7 +64,13 @@ const syncSuites: (props: SuiteProps) => void = async ({
 
 aha.on(
   { event: `${IDENTIFIER}.syncSuites` },
-  async ({ domain, eventKey, projectId }) => {
-    await syncSuites({ domain, eventKey, projectId, record: aha.account });
+  async ({ domain, eventKey, projectId, page }) => {
+    await syncSuites({
+      domain,
+      eventKey,
+      projectId,
+      page,
+      record: aha.account,
+    });
   }
 );
