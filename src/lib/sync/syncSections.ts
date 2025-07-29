@@ -6,14 +6,16 @@ type SyncProps = BaseSyncProps & {
   projectSuites: {
     [projectId: string]: number[];
   };
+  ignoredSuiteIds: number[];
 };
 
 const syncSections: (props: SyncProps) => Promise<Section[]> = async ({
   domain,
   projectSuites,
+  ignoredSuiteIds,
 }) => {
   if (Object.keys(projectSuites).length === 0) {
-    throw new Error('No synced projects found, aborting section sync.');
+    return [];
   }
 
   const now = Date.now();
@@ -30,6 +32,8 @@ const syncSections: (props: SyncProps) => Promise<Section[]> = async ({
     }
 
     for (const suiteId of projectSuites[projectId]) {
+      if (ignoredSuiteIds.includes(suiteId)) continue;
+
       lambdaArgs.push({ projectId, suiteId });
     }
   }

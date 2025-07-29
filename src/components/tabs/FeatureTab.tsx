@@ -48,7 +48,7 @@ const getFeatureTabData: (
     {}
   );
 
-  const [runTestMap, runTests] = await getRunRowData(runIds);
+  const [runTestMap, runTests] = await getRunRowData(runs.map(run => run.id));
 
   const testIdSet = new Set(runTests.map(test => test.id));
   const statusIds = new Set(runTests.map(test => test.statusId));
@@ -132,7 +132,11 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
       statuses: {},
     };
 
-  if (caseIds) {
+  // Prevent errors if a linked record was deleted (e.g. from the suite ignore-list)
+  const existingCaseIds = testCases.map(testCase => testCase.id);
+  const existingRunIds = runs.map(run => run.id);
+
+  if (testCases.length > 0) {
     caseRows = testCases.map(testCase => {
       const test = tests[testCase.id];
       const status = test && statuses[test.statusId];
@@ -153,7 +157,7 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
     });
   }
 
-  if (runIds) {
+  if (runs.length > 0) {
     runRows = runs.map(run => {
       const rows = runTestMap[run.id] ?? [];
 
@@ -222,7 +226,7 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
         {linkRunModalOpen && (
           <LinkTestRun
             record={record}
-            runIds={runIds}
+            runIds={existingRunIds}
             syncData={syncData}
             onClose={() => setLinkRunModalOpen(false)}
           />
@@ -230,7 +234,7 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
         {linkCaseModalOpen && (
           <LinkTestCase
             record={record}
-            caseIds={caseIds}
+            caseIds={existingCaseIds}
             syncData={syncData}
             onClose={onClose(setLinkCaseModalOpen)}
           />
@@ -238,7 +242,7 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
         {linkTestModalOpen && (
           <LinkTest
             record={record}
-            caseIds={caseIds}
+            caseIds={existingCaseIds}
             syncData={syncData}
             onClose={onClose(setLinkTestModalOpen)}
           />

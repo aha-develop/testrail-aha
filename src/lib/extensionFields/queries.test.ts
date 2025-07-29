@@ -262,7 +262,7 @@ describe('getProjectSuiteMapping', () => {
   });
 
   it('returns empty object for empty input', async () => {
-    const result = await getProjectSuiteMapping([]);
+    const result = await getProjectSuiteMapping([], []);
     expect(result).toEqual({});
   });
 
@@ -272,11 +272,27 @@ describe('getProjectSuiteMapping', () => {
       { name: 'project_2_suiteIds', value: [3, 4] },
     ]);
 
-    const result = await getProjectSuiteMapping([1, 2]);
+    const result = await getProjectSuiteMapping([1, 2], []);
 
     expect(result).toEqual({
       1: [1, 2],
       2: [3, 4],
+    });
+  });
+
+  it('ignores specified suite IDs', async () => {
+    const ignoredSuiteIds = [2, 4];
+
+    mockQueryFields.mockResolvedValue([
+      { name: 'project_1_suiteIds', value: [1, 2] },
+      { name: 'project_2_suiteIds', value: [3, 4] },
+    ]);
+
+    const result = await getProjectSuiteMapping([1, 2], ignoredSuiteIds);
+
+    expect(result).toEqual({
+      1: [1],
+      2: [3],
     });
   });
 });

@@ -171,3 +171,12 @@ const saveChunked: (
     await aha.account.setExtensionFields(IDENTIFIER, chunkFields);
   }
 };
+
+export const deleteChunked: (
+  fields: string[]
+) => Promise<void> = async fields => {
+  for (let i = 0; i < fields.length; i += MAX_FIELDS_PER_SAVE) {
+    const chunk = fields.slice(i, i + MAX_FIELDS_PER_SAVE);
+    await aha.account.clearExtensionFields(IDENTIFIER, chunk);
+  }
+};

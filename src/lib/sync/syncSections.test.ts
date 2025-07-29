@@ -26,10 +26,15 @@ describe('syncSections', () => {
     jest.clearAllMocks();
   });
 
-  it('throws error if no projects found', async () => {
-    await expect(
-      syncSections({ domain: 'test', projectSuites: {} })
-    ).rejects.toThrow('No synced projects found, aborting section sync.');
+  it('early returns if no projects found', async () => {
+    const result = await syncSections({
+      domain: 'test',
+      projectSuites: {},
+      ignoredSuiteIds: [],
+    });
+
+    expect(result).toEqual([]);
+    expect(mockSetExtensionField).not.toHaveBeenCalled();
   });
 
   it('syncs sections without suites', async () => {
@@ -56,6 +61,7 @@ describe('syncSections', () => {
     const result = await syncSections({
       domain: 'test',
       projectSuites: { '100': [] },
+      ignoredSuiteIds: [],
     });
 
     expect(waitForIndexedLambda).toHaveBeenCalledWith({
@@ -105,6 +111,7 @@ describe('syncSections', () => {
         '100': [1, 2],
         '101': [3],
       },
+      ignoredSuiteIds: [],
     });
 
     expect(waitForIndexedLambda).toHaveBeenCalledWith({
@@ -157,6 +164,7 @@ describe('syncSections', () => {
         '101': [],
         '102': [2, 3],
       },
+      ignoredSuiteIds: [],
     });
 
     const { argFunc } = mockWaitIndexed.mock.calls[0][0];
@@ -173,6 +181,7 @@ describe('syncSections', () => {
     const result = await syncSections({
       domain: 'test',
       projectSuites: { '100': [1] },
+      ignoredSuiteIds: [],
     });
 
     expect(saveRecords).toHaveBeenCalledWith([]);
@@ -183,5 +192,47 @@ describe('syncSections', () => {
     );
 
     expect(result).toEqual([]);
+  });
+
+  it('skips syncing sections from ignored suites', async () => {
+    const mockSections = [
+      {
+        id: 1,
+        kind: 'Section',
+        projectId: 100,
+        suiteId: 2,
+        name: 'Section 1',
+      },
+      {
+        id: 2,
+        kind: 'Section',
+        projectId: 100,
+        suiteId: 2,
+        name: 'Section 2',
+      },
+    ];
+
+    mockWaitIndexed.mockResolvedValue(mockSections);
+
+    const result = await syncSections({
+      domain: 'test',
+      projectSuites: { '100': [1, 2] },
+      ignoredSuiteIds: [1],
+    });
+
+    expect(waitForIndexedLambda).toHaveBeenCalledWith({
+      lambdaFunc: expect.any(Function),
+      args: { domain: 'test' },
+      eventKey: expect.stringContaining('syncSections-'),
+      argFunc: expect.any(Function),
+      numIds: 1,
+    });
+
+    const { argFunc } = mockWaitIndexed.mock.calls[0][0];
+
+    expect(argFunc(0)).toEqual({ projectId: '100', suiteId: 2 });
+
+    expect(saveRecords).toHaveBeenCalledWith(mockSections);
+    expect(result).toEqual(mockSections);
   });
 });

@@ -26,14 +26,16 @@ describe('syncCases', () => {
     jest.clearAllMocks();
   });
 
-  it('throws error if no projects found', async () => {
-    await expect(
-      syncCases({
-        domain: 'test',
-        lastCaseSync: 0,
-        projectSuites: {},
-      })
-    ).rejects.toThrow('No synced projects found, aborting test case sync.');
+  it('early returns if no projects found', async () => {
+    const result = await syncCases({
+      domain: 'test',
+      lastCaseSync: 0,
+      projectSuites: {},
+      ignoredSuiteIds: [],
+    });
+    expect(result).toEqual([]);
+
+    expect(mockSetExtensionField).not.toHaveBeenCalled();
   });
 
   it('syncs cases', async () => {
@@ -65,6 +67,7 @@ describe('syncCases', () => {
         '1': [100, 101],
         '2': [102],
       },
+      ignoredSuiteIds: [],
     });
 
     expect(waitForIndexedLambda).toHaveBeenCalledWith({
@@ -92,6 +95,43 @@ describe('syncCases', () => {
     expect(result).toEqual(mockCases);
   });
 
+  it('does not save cases from ignored suites', async () => {
+    const mockCases: TestCase[] = [
+      {
+        id: 1,
+        kind: 'TestCase',
+        projectId: 1,
+        suiteId: 2,
+        title: 'Case 1',
+        createdOn: 0,
+      },
+    ];
+
+    mockWaitIndexed.mockResolvedValue(mockCases);
+    const ignoredSuiteIds = [1];
+
+    const result = await syncCases({
+      domain: 'test',
+      lastCaseSync: 0,
+      projectSuites: {
+        '1': [1, 2],
+      },
+      ignoredSuiteIds,
+    });
+
+    expect(waitForIndexedLambda).toHaveBeenCalledWith({
+      lambdaFunc: expect.any(Function),
+      args: { domain: 'test' },
+      eventKey: expect.stringContaining('syncCases-'),
+      argFunc: expect.any(Function),
+      numIds: 1,
+    });
+
+    const { argFunc } = mockWaitIndexed.mock.calls[0][0];
+
+    expect(argFunc(0)).toEqual({ projectId: '1', suiteId: 2 });
+  });
+
   it('includes updatedAfter parameter when lastCaseSync provided', async () => {
     const lastSync = Date.now();
     mockWaitIndexed.mockResolvedValue([]);
@@ -100,6 +140,7 @@ describe('syncCases', () => {
       domain: 'test',
       lastCaseSync: lastSync,
       projectSuites: { '1': [] },
+      ignoredSuiteIds: [],
     });
 
     expect(waitForIndexedLambda).toHaveBeenCalledWith({

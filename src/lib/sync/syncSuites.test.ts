@@ -26,16 +26,26 @@ describe('syncSuites', () => {
     jest.clearAllMocks();
   });
 
-  it('throws error if no project IDs provided', async () => {
-    await expect(
-      syncSuites({ domain: 'test', projectIds: [] })
-    ).rejects.toThrow('No synced projects found, aborting suite sync.');
+  it('early returns if no project IDs provided', async () => {
+    const result = await syncSuites({
+      domain: 'test',
+      projectIds: [],
+      ignoredSuiteIds: [],
+    });
+
+    expect(result).toEqual([]);
+    expect(mockSetExtensionField).not.toHaveBeenCalled();
   });
 
-  it('throws error if project IDs undefined', async () => {
-    await expect(
-      syncSuites({ domain: 'test', projectIds: undefined })
-    ).rejects.toThrow('No synced projects found, aborting suite sync.');
+  it('early returns if project IDs undefined', async () => {
+    const result = await syncSuites({
+      domain: 'test',
+      projectIds: undefined,
+      ignoredSuiteIds: [],
+    });
+
+    expect(result).toEqual([]);
+    expect(mockSetExtensionField).not.toHaveBeenCalled();
   });
 
   it('syncs and saves suites', async () => {
@@ -56,7 +66,11 @@ describe('syncSuites', () => {
 
     mockWaitIndexed.mockResolvedValue(mockSuites);
 
-    const result = await syncSuites({ domain: 'test', projectIds: [100] });
+    const result = await syncSuites({
+      domain: 'test',
+      projectIds: [100],
+      ignoredSuiteIds: [],
+    });
 
     expect(waitForIndexedLambda).toHaveBeenCalledWith({
       lambdaFunc: expect.any(Function),
@@ -97,6 +111,7 @@ describe('syncSuites', () => {
     const result = await syncSuites({
       domain: 'test',
       projectIds: [100, 101],
+      ignoredSuiteIds: [],
     });
 
     expect(waitForIndexedLambda).toHaveBeenCalledWith({
@@ -120,7 +135,11 @@ describe('syncSuites', () => {
   it('handles empty suite list', async () => {
     mockWaitIndexed.mockResolvedValue([]);
 
-    const result = await syncSuites({ domain: 'test', projectIds: [100] });
+    const result = await syncSuites({
+      domain: 'test',
+      projectIds: [100],
+      ignoredSuiteIds: [],
+    });
 
     expect(saveRecords).toHaveBeenCalledWith([]);
     expect(mockSetExtensionField).toHaveBeenCalledWith(
@@ -130,5 +149,47 @@ describe('syncSuites', () => {
     );
 
     expect(result).toEqual([]);
+  });
+
+  it('does not sync ignored suites', async () => {
+    const mockSuites = [
+      {
+        id: 1,
+        kind: 'Suite',
+        name: 'Suite 1',
+        projectId: 100,
+      },
+      {
+        id: 2,
+        kind: 'Suite',
+        name: 'Suite 2',
+        projectId: 100,
+      },
+    ];
+
+    mockWaitIndexed.mockResolvedValue(mockSuites);
+
+    const result = await syncSuites({
+      domain: 'test',
+      projectIds: [100],
+      ignoredSuiteIds: [1],
+    });
+
+    expect(waitForIndexedLambda).toHaveBeenCalledWith({
+      lambdaFunc: expect.any(Function),
+      argFunc: expect.any(Function),
+      args: { domain: 'test' },
+      eventKey: expect.stringContaining('syncSuites-'),
+      numIds: 1,
+    });
+
+    expect(saveRecords).toHaveBeenCalledWith([mockSuites[1]]);
+    expect(mockSetExtensionField).toHaveBeenCalledWith(
+      IDENTIFIER,
+      'lastSuiteSync',
+      expect.any(Number)
+    );
+
+    expect(result).toEqual([mockSuites[1]]);
   });
 });

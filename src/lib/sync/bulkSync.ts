@@ -61,6 +61,7 @@ type SyncResults = {
   projectIds?: number[];
   projectSuites?: { [projectId: string]: number[] };
   runIds?: number[];
+  ignoredSuiteIds?: number[];
 };
 
 type BaseSyncStageProps = {
@@ -225,8 +226,23 @@ const bulkSync: (props: SyncProps) => Promise<void> = async ({
       IDENTIFIER,
       'projectIds'
     );
-    const projectSuites = await getProjectSuiteMapping(projectIds);
-    syncResults = { projectIds, projectSuites };
+
+    const ignoredSuites =
+      (await aha.account.getExtensionField<number[]>(
+        IDENTIFIER,
+        'ignoredSuites'
+      )) ?? [];
+
+    const projectSuites = await getProjectSuiteMapping(
+      projectIds,
+      ignoredSuites
+    );
+
+    syncResults = {
+      projectIds,
+      projectSuites,
+      ignoredSuiteIds: ignoredSuites,
+    };
   } else {
     syncState = { ...syncState, stage: getInitialStage(type), progress: 0 };
   }
@@ -315,6 +331,14 @@ const syncInitialRecords: (
 
     const projects = await syncProjects({ domain });
 
+    const ignoredSuites =
+      (await aha.account.getExtensionField<number[]>(
+        IDENTIFIER,
+        'ignoredSuites'
+      )) ?? [];
+
+    const ignoredSuiteIds = ignoredSuites;
+
     let nextStage = SyncStage.Suites;
     if (type === SyncType.Tests) {
       nextStage = SyncStage.OpenRuns;
@@ -339,6 +363,7 @@ const syncInitialRecords: (
     const suiteParams = {
       domain,
       projectIds,
+      ignoredSuiteIds,
     };
 
     const projectSuites = {};
@@ -363,6 +388,7 @@ const syncInitialRecords: (
     const sectionParams = {
       domain,
       projectSuites,
+      ignoredSuiteIds,
     };
 
     await syncSections(sectionParams);
@@ -375,8 +401,9 @@ const syncInitialRecords: (
 
     await setSyncState(newSyncState);
 
-    return [{ projectIds, projectSuites }, newSyncState];
+    return [{ projectIds, projectSuites, ignoredSuiteIds }, newSyncState];
   } catch (error) {
+    console.log('Error during sync:', error);
     syncState = { ...newSyncState, state: SyncState.Errored };
     await setSyncState(syncState);
 
@@ -404,6 +431,7 @@ const syncRequiresProjects: (
         domain,
         projectSuites: results.projectSuites,
         lastCaseSync: lastSync,
+        ignoredSuiteIds: results.ignoredSuiteIds,
       };
 
       await syncCases(caseParams);
@@ -425,6 +453,7 @@ const syncRequiresProjects: (
     const baseParams = {
       domain,
       projectIds: results.projectIds,
+      ignoredSuiteIds: results.ignoredSuiteIds,
     };
 
     const runParams = { ...baseParams, lastRunSync: lastSync };
@@ -473,6 +502,7 @@ const syncRequiresProjects: (
 
     return [{ ...results, runIds: runs.map(run => run.id) }, newSyncState];
   } catch (error) {
+    console.log('Error during sync:', error);
     syncState = { ...newSyncState, state: SyncState.Errored };
     await setSyncState(syncState);
 
@@ -518,6 +548,7 @@ const syncRequiresRuns: (
 
     await finishSync(newSyncState, type, setSyncState);
   } catch (error) {
+    console.log('Error during sync:', error);
     syncState = { ...newSyncState, state: SyncState.Errored };
     await setSyncState(syncState);
 

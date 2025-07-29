@@ -89,7 +89,7 @@ export const getAccountExtensionFieldMap: <T>(
   }, {});
 };
 
-const getAccountExtensionFields: <T>(
+export const getAccountExtensionFields: <T>(
   names: string[]
 ) => Promise<T[]> = async names => {
   const extensionFields = await queryExtensionFields(names);
@@ -135,7 +135,21 @@ export const getProjectRecords: <
 
   const records = await getRecords<T>(ids, kind);
 
+  let ignoredSuites = [];
+
+  if (kind === 'Suite') {
+    ignoredSuites =
+      (await aha.account.getExtensionField<number[]>(
+        IDENTIFIER,
+        'ignoredSuites'
+      )) || [];
+  }
+
   for (const record of records) {
+    if (kind === 'Suite' && ignoredSuites.includes(record.id)) {
+      continue;
+    }
+
     if (!mapping[record.projectId]) {
       mapping[record.projectId] = [];
     }
@@ -147,8 +161,12 @@ export const getProjectRecords: <
 };
 
 export const getProjectSuiteMapping: (
-  projectIds: number[] | undefined
-) => Promise<{ [projectId: number]: number[] }> = async projectIds => {
+  projectIds: number[] | undefined,
+  ignoredSuites: number[]
+) => Promise<{ [projectId: number]: number[] }> = async (
+  projectIds,
+  ignoredSuites
+) => {
   if (!projectIds || projectIds.length === 0) return {};
 
   const keys = projectIds.map(projectId =>
@@ -161,11 +179,17 @@ export const getProjectSuiteMapping: (
   for (const key in suiteFields) {
     const projectId = key.split('_')[1];
 
+    const visibleSuites = suiteFields[key].filter(
+      suiteId => !ignoredSuites.includes(suiteId)
+    );
+
+    if (visibleSuites.length === 0) continue;
+
     if (!projectSuites[projectId]) {
       projectSuites[projectId] = [];
     }
 
-    projectSuites[projectId].push(...suiteFields[key]);
+    projectSuites[projectId].push(...visibleSuites);
   }
 
   return projectSuites;
