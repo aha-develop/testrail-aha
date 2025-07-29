@@ -19,12 +19,22 @@ const resync: (props: ResyncProps) => Promise<void> = async ({
         'projectIds'
       )) ?? [];
 
-    const projectSuites = await getProjectSuiteMapping(projectIds);
+    const ignoredSuites =
+      (await aha.account.getExtensionField<number[]>(
+        IDENTIFIER,
+        'ignoredSuites'
+      )) ?? [];
+
+    const projectSuites = await getProjectSuiteMapping(
+      projectIds,
+      ignoredSuites
+    );
     const now = Date.now();
 
     await syncSections({
       domain,
       projectSuites,
+      ignoredSuiteIds: ignoredSuites,
     });
 
     await setLastSync(now);

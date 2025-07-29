@@ -11,22 +11,25 @@ const NUM_COMPLETED_PLANS = 250;
 
 type SyncPlanProps = BaseSyncProps & {
   projectIds: number[];
+  ignoredSuiteIds: number[];
 };
 
 type SyncCompletedProps = BaseSyncProps & {
   projectIds: number[];
+  ignoredSuiteIds: number[];
 };
 
 type SyncRunProps = BaseSyncProps & {
   planIds: number[];
   completed?: boolean;
+  ignoredSuiteIds: number[];
 };
 
 export const syncOpenPlans: (
   props: SyncPlanProps
-) => Promise<TestRun[]> = async ({ domain, projectIds }) => {
+) => Promise<TestRun[]> = async ({ domain, projectIds, ignoredSuiteIds }) => {
   if (!projectIds?.length) {
-    throw new Error('No synced projects found, skipping open test plan sync.');
+    return [];
   }
 
   const now = Date.now();
@@ -50,18 +53,16 @@ export const syncOpenPlans: (
   });
 
   await aha.account.setExtensionField(IDENTIFIER, 'lastPlanSync', now);
-  return await syncRunsForPlan({ domain, planIds: openPlans });
+  return await syncRunsForPlan({ domain, ignoredSuiteIds, planIds: openPlans });
 };
 
 // This stage is primarily useful for first sync to get historical data,
 // or as a backup if a plan managed to open and close between syncs of open plans.
 export const syncCompletedPlans: (
   props: SyncCompletedProps
-) => Promise<TestRun[]> = async ({ domain, projectIds }) => {
+) => Promise<TestRun[]> = async ({ domain, projectIds, ignoredSuiteIds }) => {
   if (!projectIds?.length) {
-    throw new Error(
-      'No synced projects found, skipping completed test plan sync.'
-    );
+    return [];
   }
 
   const now = Date.now();
@@ -84,13 +85,19 @@ export const syncCompletedPlans: (
   });
 
   await aha.account.setExtensionField(IDENTIFIER, 'lastCompletedPlanSync', now);
-  return await syncRunsForPlan({ domain, planIds, completed: true });
+  return await syncRunsForPlan({
+    domain,
+    ignoredSuiteIds,
+    planIds,
+    completed: true,
+  });
 };
 
 const syncRunsForPlan: (props: SyncRunProps) => Promise<TestRun[]> = async ({
   domain,
   planIds,
   completed = false,
+  ignoredSuiteIds,
 }) => {
   if (!planIds || planIds.length === 0) {
     return [];
@@ -111,6 +118,8 @@ const syncRunsForPlan: (props: SyncRunProps) => Promise<TestRun[]> = async ({
     idKey: 'planId',
     ids: planIds,
   });
+
+  runs = runs.filter(run => !ignoredSuiteIds.includes(run.suiteId));
 
   // When syncing completed plans, only save new records to reduce syncing effort.
   if (completed) {

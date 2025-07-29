@@ -32,7 +32,7 @@ const getSprintTabData: (
   runIds: number[]
 ) => Promise<SprintTabData> = async runIds => {
   const runs = await getRecords<TestRun>(runIds, 'TestRun');
-  const [testMap, tests] = await getRunRowData(runIds);
+  const [testMap, tests] = await getRunRowData(runs.map(run => run.id));
 
   const commentMap = await getLinkedComments(tests.map(test => test.id));
 
@@ -96,7 +96,9 @@ const SprintTab: React.FC<TabProps> = ({ record, fields, settings }) => {
     statuses: {},
   };
 
-  if (runIds) {
+  const existingRunIds = runs.map(run => run.id);
+
+  if (runs.length > 0) {
     runRows = runs.map(run => {
       const rows = testMap[run.id] ?? [];
 
@@ -139,7 +141,7 @@ const SprintTab: React.FC<TabProps> = ({ record, fields, settings }) => {
         {linkRunModalOpen && (
           <LinkTestRun
             record={record}
-            runIds={runIds}
+            runIds={existingRunIds}
             syncData={syncData}
             onClose={() => setLinkRunModalOpen(false)}
           />

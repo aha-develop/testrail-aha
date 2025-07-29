@@ -11,14 +11,16 @@ const NUM_COMPLETED_RUNS = 250;
 
 type SyncProps = BaseSyncProps & {
   projectIds: number[];
+  ignoredSuiteIds: number[];
 };
 
 export const syncOpenRuns: (props: SyncProps) => Promise<TestRun[]> = async ({
   domain,
   projectIds,
+  ignoredSuiteIds,
 }) => {
   if (!projectIds?.length) {
-    throw new Error('No synced projects found, aborting open test run sync.');
+    return [];
   }
 
   const now = Date.now();
@@ -39,19 +41,21 @@ export const syncOpenRuns: (props: SyncProps) => Promise<TestRun[]> = async ({
     numIds: projectIds.length,
   });
 
-  await saveRecords<TestRun>(openRuns);
+  const runsToSave = openRuns.filter(
+    run => !ignoredSuiteIds.includes(run.suiteId)
+  );
+
+  await saveRecords<TestRun>(runsToSave);
   await aha.account.setExtensionField(IDENTIFIER, 'lastRunSync', now);
 
-  return openRuns;
+  return runsToSave;
 };
 
 export const syncCompletedRuns: (
   props: SyncProps
-) => Promise<TestRun[]> = async ({ domain, projectIds }) => {
+) => Promise<TestRun[]> = async ({ domain, projectIds, ignoredSuiteIds }) => {
   if (!projectIds?.length) {
-    throw new Error(
-      'No synced projects found, aborting completed test run sync.'
-    );
+    return [];
   }
 
   const now = Date.now();
@@ -71,7 +75,11 @@ export const syncCompletedRuns: (
     ids: projectIds,
   });
 
-  const newRuns = await saveNewRuns(completedRuns);
+  const runsToSave = completedRuns.filter(
+    run => !ignoredSuiteIds.includes(run.suiteId)
+  );
+
+  const newRuns = await saveNewRuns(runsToSave);
   await aha.account.setExtensionField(IDENTIFIER, 'lastCompletedRunSync', now);
 
   return newRuns;

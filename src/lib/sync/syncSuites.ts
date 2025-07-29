@@ -4,14 +4,16 @@ import { saveRecords } from '../extensionFields/updates';
 
 type SyncProps = BaseSyncProps & {
   projectIds: number[];
+  ignoredSuiteIds: number[];
 };
 
 const syncSuites: (props: SyncProps) => Promise<Suite[]> = async ({
   domain,
   projectIds,
+  ignoredSuiteIds,
 }) => {
   if (!projectIds?.length) {
-    throw new Error('No synced projects found, aborting suite sync.');
+    return [];
   }
 
   const now = Date.now();
@@ -33,10 +35,15 @@ const syncSuites: (props: SyncProps) => Promise<Suite[]> = async ({
     numIds: projectIds.length,
   });
 
-  await saveRecords<Suite>(suites);
+  const visibleSuites = suites.filter(
+    suite => !ignoredSuiteIds.includes(suite.id)
+  );
+
+  await saveRecords<Suite>(visibleSuites);
+
   await aha.account.setExtensionField(IDENTIFIER, 'lastSuiteSync', now);
 
-  return suites;
+  return visibleSuites;
 };
 
 export default syncSuites;

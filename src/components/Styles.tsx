@@ -331,6 +331,22 @@ export const Styles = () => {
           min-width: 62px;
           text-align: center;
         }
+
+        .chevron {
+          width: var(--spacer-4);
+        }
+
+        .ignore-section {
+          cursor: pointer;
+          display: flex;
+          gap: var(--spacer-2);
+          align-items: baseline;
+          padding-bottom: var(--spacer-3);
+        }
+
+        .ignore-button {
+          padding-bottom: var(--spacer-2);
+        }
       `}
     </style>
   );

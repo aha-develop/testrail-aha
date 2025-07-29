@@ -9,6 +9,7 @@ const queryExtensionFields: (
 ) => Promise<Aha.ExtensionField[]> = async (names: string[]) => {
   if (!names || names.length === 0) return [];
 
+  // @ts-ignore
   const results = await aha.models.ExtensionField.select('name', 'value')
     .where({
       names: names,

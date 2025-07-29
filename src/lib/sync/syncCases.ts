@@ -7,15 +7,17 @@ type SyncProps = BaseSyncProps & {
   projectSuites: {
     [projectId: string]: number[];
   };
+  ignoredSuiteIds: number[];
 };
 
 const syncCases: (props: SyncProps) => Promise<TestCase[]> = async ({
   domain,
   lastCaseSync,
   projectSuites,
+  ignoredSuiteIds,
 }) => {
   if (Object.keys(projectSuites).length === 0) {
-    throw new Error('No synced projects found, aborting test case sync.');
+    return []; // Possible if syncing out of order or all suites are ignored
   }
 
   const now = Date.now();
@@ -32,6 +34,8 @@ const syncCases: (props: SyncProps) => Promise<TestCase[]> = async ({
     }
 
     for (const suiteId of projectSuites[projectId]) {
+      if (ignoredSuiteIds.includes(suiteId)) continue;
+
       lambdaArgs.push({ projectId, suiteId });
     }
   }

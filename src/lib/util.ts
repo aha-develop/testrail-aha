@@ -35,7 +35,7 @@ export const numberToColor: (color: number) => string = color => {
 // Set the value here to mimic core Aha! behaviour
 const showMessage: (
   msg: string,
-  type: 'danger' | 'warning',
+  type: 'danger' | 'warning' | 'success',
   heading?: string
 ) => void = (msg, type, heading) => {
   const flash = `
@@ -56,6 +56,10 @@ const showMessage: (
 
 export const showError: (msg: string) => void = msg => {
   showMessage(msg, 'danger');
+};
+
+export const showSuccess: (msg: string) => void = msg => {
+  showMessage(msg, 'success');
 };
 
 export const showSyncWarning: () => void = () => {
