@@ -73,9 +73,9 @@ const ConfirmIgnoreModal: React.FC<{
       <aha-modal-body>
         <div>
           Are you sure you want to update the ignored suites? This will delete
-          the ignored suites and all associated sections, test cases, and
-          results. If you remove a suite from the ignore list, a full re-sync
-          will be required to reload the data associated with that suite.
+          ignored suites and all their associated sections, test cases, and
+          results. If you remove a suite from the ignore list, you must perform
+          a full resync to reload its data.
         </div>
       </aha-modal-body>
       <aha-modal-footer>
