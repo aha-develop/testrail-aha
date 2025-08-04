@@ -46,7 +46,6 @@ const SelectTestRun: React.FC<Props> = ({
 
       const mapping = await getAccountExtensionFieldMap<number[]>(keys);
       setSearchMapping(() => mapping);
-      console.log('Search mapping:', mapping);
       setLoading(() => false);
     };
 
@@ -129,8 +128,6 @@ const SelectTestRun: React.FC<Props> = ({
     () => searchMapping[indexKeyForKindAndParent('TestRun', projectId)] || [],
     [searchMapping, projectId]
   );
-
-  console.log('Search IDs:', searchIds);
 
   return (
     <ApiSearch
