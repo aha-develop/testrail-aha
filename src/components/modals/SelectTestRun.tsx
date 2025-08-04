@@ -20,6 +20,7 @@ type Props = {
     isSelected: boolean,
     meta?: any
   ) => Promise<void>;
+  filter?: (run: TestRun) => boolean;
 };
 
 const SelectTestRun: React.FC<Props> = ({
@@ -29,6 +30,7 @@ const SelectTestRun: React.FC<Props> = ({
   projects,
   projectId,
   updateSelectedRuns,
+  filter,
 }) => {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(null); // True if syncing on initial load
@@ -96,6 +98,10 @@ const SelectTestRun: React.FC<Props> = ({
       if (runsToFetch.length > 0) {
         const records = await getRecords<TestRun>(runsToFetch, 'TestRun');
         children = children.concat(records);
+      }
+
+      if (filter) {
+        children = children.filter(run => filter(run));
       }
 
       children.sort((a, b) => b.id - a.id);

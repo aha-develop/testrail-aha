@@ -5,7 +5,7 @@ import React, {
   useState,
   useRef,
 } from 'react';
-import { IDENTIFIER, Project, Test, TestCase } from '../../extension';
+import { IDENTIFIER, Project, Test, TestCase, TestRun } from '../../extension';
 import { BulkSyncState } from '../../lib/sync/bulkSync';
 import { ExtensionRecord } from '../../lib/extensionRecord';
 import {
@@ -73,6 +73,15 @@ const LinkTestToTestCase: React.FC<Props> = ({
     []
   );
 
+  // We can filter out runs that don't match the test case's suite or were created
+  // before the test case was created.
+  // This should reduce the chance of showing a run that doesn't have a matching test for the case.
+  const filterRuns = useCallback(
+    (run: TestRun) =>
+      run.suiteId === testCase.suiteId && run.createdOn >= testCase.createdOn,
+    [testCase]
+  );
+
   const submit = useCallback(async () => {
     if (!runId) return;
 
@@ -85,7 +94,7 @@ const LinkTestToTestCase: React.FC<Props> = ({
 
     if (!testIds || !testIds.length) {
       setSaving(() => false);
-      setError(() => 'No test results found for the selected run');
+      setError(() => 'No test results found for the selected run.');
       return;
     }
 
@@ -94,7 +103,10 @@ const LinkTestToTestCase: React.FC<Props> = ({
 
     if (!testId) {
       setSaving(() => false);
-      setError(() => 'Selected run has no results for linked test case');
+      setError(
+        () =>
+          'Selected run has no results for linked test case. Please choose a different run.'
+      );
       return;
     }
 
@@ -133,6 +145,7 @@ const LinkTestToTestCase: React.FC<Props> = ({
             projectId={testCase.projectId}
             selectedRunIds={selectedRunIds}
             updateSelectedRuns={updateSelectedRun}
+            filter={filterRuns}
           />
         </div>
       </aha-modal-body>
