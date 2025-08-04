@@ -1,115 +1,17 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { IDENTIFIER, Project, TestRun } from '../../extension';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
+import { IDENTIFIER, Project } from '../../extension';
 import { ExtensionRecord } from '../../lib/extensionRecord';
-import SearchByName, { TreeNode } from './SearchByName';
-import {
-  getRecords,
-  getProjectRecords,
-} from '../../lib/extensionFields/queries';
-import { linkRecord } from '../../lib/extensionFields/updates';
-import { BulkSyncState, SyncStage, SyncState } from '../../lib/sync/bulkSync';
-import SyncProgress from '../SyncProgress';
+import { getRecords } from '../../lib/extensionFields/queries';
+import { linkRecords } from '../../lib/extensionFields/updates';
+import { BulkSyncState } from '../../lib/sync/bulkSync';
+import SelectProject from './SelectProject';
+import SelectTestRun from './SelectTestRun';
 
 type Props = {
   record: ExtensionRecord;
   runIds: number[] | undefined;
   syncData: BulkSyncState;
   onClose: () => void;
-};
-
-const runOptions: (
-  projects: Project[],
-  runMapping: {
-    [projectId: string]: TestRun[];
-  },
-  runIds: number[]
-) => TreeNode[] = (projects, runMapping, runIds) => {
-  const options: TreeNode[] = [];
-
-  let idMapping: { [runId: number]: boolean } = [];
-
-  if (runIds && runIds.length) {
-    idMapping = runIds.reduce((acc, id) => {
-      acc[id] = true;
-      return acc;
-    }, {});
-  }
-
-  for (const project of projects) {
-    const runs = runMapping[project.id] || [];
-
-    const openRuns = [];
-    const completedRuns = [];
-
-    for (const run of runs) {
-      if (idMapping[run.id]) continue;
-
-      if (run.completed) {
-        completedRuns.push(run);
-      } else {
-        openRuns.push(run);
-      }
-    }
-
-    let openHeader: TreeNode = null;
-    let completedHeader: TreeNode = null;
-
-    if (openRuns.length) {
-      openHeader = {
-        value: project.id.toString(),
-        text: 'Open runs',
-        header: true,
-        children: openRuns.map(r => ({
-          text: r.name,
-          value: `${r.id}`,
-          date: r.createdOn * 1000,
-        })),
-      };
-    }
-
-    if (completedRuns.length) {
-      completedHeader = {
-        value: project.id.toString(),
-        text: 'Completed runs',
-        header: true,
-        children: completedRuns.map(r => ({
-          text: r.name,
-          value: `${r.id}`,
-          date: r.createdOn * 1000,
-        })),
-      };
-    }
-
-    const children = [openHeader, completedHeader].filter(Boolean);
-
-    if (children.length === 0) continue;
-
-    const header: TreeNode = {
-      value: project.id.toString(),
-      text: project.name,
-      children,
-    };
-
-    options.push(header);
-  }
-
-  return options;
-};
-
-const findChild: (node: TreeNode, value: string) => boolean = (node, value) => {
-  if (node.value === value) {
-    return true;
-  }
-
-  if (!node.children) return false;
-
-  for (const child of node.children) {
-    if (findChild(child, value)) {
-      return true;
-    }
-  }
-
-  return false;
 };
 
 const LinkTestRun: React.FC<Props> = ({
@@ -119,69 +21,11 @@ const LinkTestRun: React.FC<Props> = ({
   onClose,
 }) => {
   const modalRef = useRef(null);
-  const runIdRef = useRef(null);
 
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  const [syncing, setSyncing] = useState(null);
-  const [syncStage, setSyncStage] = useState(syncData?.stage);
-
-  const [runId, setRunId] = useState<string>(null);
-  const [runTree, setRunTree] = useState<TreeNode[]>([]);
-
-  const updateRunId = async value => {
-    runIdRef.current = value; // Use this as a cache, the state is not updated immediately
-    setRunId(value);
-  };
-
-  const submit = async () => {
-    if (!runIdRef.current) return;
-
-    setSaving(true);
-
-    await linkRecord(record, Number.parseInt(runIdRef.current), 'runIds');
-
-    setSaving(false);
-    onClose();
-  };
-
-  useEffect(() => {
-    const fetchRuns = async () => {
-      const projectIds = await aha.account.getExtensionField<number[]>(
-        IDENTIFIER,
-        'projectIds'
-      );
-
-      const [runMapping, projects] = await Promise.all([
-        getProjectRecords<TestRun>(projectIds, 'TestRun'),
-        getRecords<Project>(projectIds, 'Project'),
-      ]);
-
-      setRunTree(runOptions(projects, runMapping, runIds));
-      setLoading(false);
-    };
-
-    if (syncData && syncing === null) {
-      setSyncing(syncData.state !== SyncState.Complete);
-    }
-
-    const lastStage = syncStage;
-    let currentStage = syncStage;
-
-    if (syncData) {
-      currentStage = syncData.stage;
-      setSyncStage(currentStage);
-    }
-
-    const syncedRuns =
-      lastStage &&
-      lastStage >= SyncStage.OpenRuns &&
-      lastStage <= SyncStage.CompletedPlans &&
-      lastStage !== currentStage;
-
-    if (loading || syncedRuns) fetchRuns();
-  }, [syncData]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectId, setProjectId] = useState<number>(null);
+  const [selectedRunIds, setSelectedRunIds] = useState<string[]>([]);
 
   useEffect(() => {
     const modal = modalRef.current;
@@ -191,6 +35,71 @@ const LinkTestRun: React.FC<Props> = ({
       modal.removeEventListener('aha-modal:close', onClose);
     };
   }, [onClose]);
+
+  useEffect(() => {
+    const fetchProjects = async () => {
+      const projectIds = await aha.account.getExtensionField<number[]>(
+        IDENTIFIER,
+        'projectIds'
+      );
+
+      const fetchedProjects = (
+        await getRecords<Project>(projectIds, 'Project')
+      ).reverse();
+
+      if (fetchedProjects?.length > 0 && !projectId) {
+        setProjectId(() => fetchedProjects[0].id);
+      }
+
+      setProjects(() => fetchedProjects);
+    };
+
+    fetchProjects();
+  }, []);
+
+  const submit = useCallback(async () => {
+    if (!selectedRunIds.length) return;
+
+    setSaving(() => true);
+
+    await linkRecords(
+      record,
+      selectedRunIds.map(id => Number.parseInt(id)),
+      'runIds'
+    );
+
+    setSaving(() => false);
+    onClose();
+  }, [selectedRunIds, record, onClose]);
+
+  const setProject = useCallback(
+    async (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const id = Number.parseInt(e.target.value);
+      setProjectId(() => id);
+      setSelectedRunIds(() => []);
+    },
+    []
+  );
+
+  const updateSelectedRuns: (
+    value: string,
+    isSelected: boolean
+  ) => Promise<void> = useCallback(
+    async (value: string, isSelected: boolean) => {
+      setSelectedRunIds(prev => {
+        if (runIds.includes(Number.parseInt(value))) {
+          return prev;
+        }
+
+        if (isSelected) {
+          return [...prev, value];
+        } else {
+          return prev.filter(id => id !== value);
+        }
+      });
+    },
+    [runIds]
+  );
 
   return (
     <aha-modal ref={modalRef} open position='h-center' size='medium'>
@@ -207,25 +116,25 @@ const LinkTestRun: React.FC<Props> = ({
           </aha-alert>
         )}
         <div className='search-form'>
-          <SearchByName
-            tree={runTree}
-            selected={[runId]}
-            onSelect={updateRunId}
-            recordName='test run'
-            showReference={true}
-            referencePrefix='R'
-            loading={loading}
-            label='Select a test run'
-            placeholder='No synced test runs found.'
-          >
-            {syncing && <SyncProgress syncData={syncData} />}
-          </SearchByName>
+          <SelectProject
+            projects={projects}
+            projectId={projectId}
+            setProject={setProject}
+          />
+          <SelectTestRun
+            syncData={syncData}
+            runIds={runIds}
+            projects={projects}
+            projectId={projectId}
+            selectedRunIds={selectedRunIds}
+            updateSelectedRuns={updateSelectedRuns}
+          />
         </div>
       </aha-modal-body>
       <aha-modal-footer>
         <aha-button
           kind='primary'
-          disabled={loading || saving || !runId ? true : null}
+          disabled={saving || !selectedRunIds.length ? true : null}
           onClick={submit}
         >
           {saving ? 'Linking...' : 'Link test run'}

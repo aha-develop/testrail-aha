@@ -8,7 +8,6 @@ import {
   getProjectRecords,
   getProjectSuiteMapping,
   getLinkedComments,
-  getRunMapForTestCase,
   getAllRunIds,
   getRunRowData,
 } from './queries';
@@ -326,78 +325,6 @@ describe('getLinkedComments', () => {
       1: mockComments['test_1_comment'],
       2: mockComments['test_2_comment'],
     });
-  });
-});
-
-describe('getRunMapForTestCase', () => {
-  beforeEach(() => {
-    jest.clearAllMocks();
-  });
-
-  it('returns empty array when no runs exist', async () => {
-    mockGetExtensionField.mockResolvedValue([]);
-
-    const testCase: TestCase = {
-      id: 1,
-      projectId: 1,
-      kind: 'TestCase',
-      suiteId: 1,
-      title: 'Test Case',
-      createdOn: 123,
-    };
-
-    const result = await getRunMapForTestCase(testCase);
-    expect(result).toEqual([]);
-  });
-
-  it('maps runs and tests correctly', async () => {
-    const testCase: TestCase = {
-      id: 1,
-      projectId: 1,
-      kind: 'TestCase',
-      suiteId: 1,
-      title: 'Test Case',
-      createdOn: 123,
-    };
-
-    const mockRuns = [
-      {
-        id: 1,
-        name: 'Run 1',
-        createdOn: 123,
-        kind: 'TestRun',
-        projectId: 1,
-        suiteId: 1,
-        completed: false,
-      },
-      {
-        id: 2,
-        name: 'Run 2',
-        createdOn: 456,
-        kind: 'TestRun',
-        projectId: 1,
-        suiteId: 1,
-        completed: false,
-      },
-    ];
-
-    const mockTests = [
-      { id: 1, runId: 1, caseId: 1, statusId: 1, kind: 'Test' },
-      { id: 2, runId: 2, caseId: 1, statusId: 1, kind: 'Test' },
-    ];
-
-    mockGetExtensionField.mockResolvedValue([1, 2]);
-    mockQueryFields
-      .mockResolvedValueOnce(mockRuns.map(run => ({ value: run })))
-      .mockResolvedValueOnce([{ value: [1, 2] }])
-      .mockResolvedValueOnce(mockTests.map(test => ({ value: test })));
-
-    const result = await getRunMapForTestCase(testCase);
-
-    expect(result).toEqual([
-      [mockTests[1], mockRuns[1].name, mockRuns[1].createdOn],
-      [mockTests[0], mockRuns[0].name, mockRuns[0].createdOn],
-    ]);
   });
 });
 

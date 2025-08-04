@@ -216,38 +216,6 @@ export const getLinkedComments: (ids: number[]) => Promise<{
   );
 };
 
-export const getRunMapForTestCase: (
-  testCase: TestCase
-) => Promise<[Test, string, number][]> = async testCase => {
-  const runIds = await aha.account.getExtensionField<number[]>(
-    IDENTIFIER,
-    indexKeyForKindAndParent('TestRun', testCase.projectId)
-  );
-
-  if (!runIds || runIds.length === 0) return [];
-
-  const runs = await getRecords<TestRun>(runIds, 'TestRun');
-  const runMap = runs.reduce((acc, run) => ({ ...acc, [run.id]: run }), {});
-
-  const testKeys = runs.map(run => indexKeyForKindAndParent('Test', run.id));
-  const testIds = (await getAccountExtensionFields<number[]>(testKeys)).flat();
-  const tests = await getRecords<Test>(testIds, 'Test');
-
-  const result: [Test, string, number][] = [];
-
-  for (const test of tests) {
-    if (test.caseId === testCase.id) {
-      const run = runMap[test.runId];
-
-      if (!run) continue;
-
-      result.push([test, run.name, run.createdOn]);
-    }
-  }
-
-  return result;
-};
-
 // Used when individual syncing tests and results - note that this is potentially less
 // performant than even bulk sync, depending on the number of saved completed runs.
 export const getAllRunIds: () => Promise<number[]> = async () => {

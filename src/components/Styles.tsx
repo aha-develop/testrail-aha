@@ -183,6 +183,12 @@ export const Styles = () => {
           color: var(--theme-button-danger);
         }
 
+        .search-select {
+          display: flex;
+          align-items: baseline;
+          gap: 20px;
+        }
+
         .search-input {
           padding: var(--spacer-2) var(--spacer-1);
         }
@@ -207,7 +213,7 @@ export const Styles = () => {
           align-items: center;
         }
 
-        .search-row:hover:not(:has(.search-header)) {
+        .search-row:hover:not(:has(.search-header)):not(.disabled) {
           background-color: var(--theme-secondary-background);
           cursor: pointer;
         }

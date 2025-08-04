@@ -1,90 +1,69 @@
-import React, { useEffect, useState } from 'react';
-import SearchByName, { TreeNode } from './SearchByName';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import ApiSearch, { TreeNode } from './ApiSearch';
 import SyncProgress from '../SyncProgress';
 import { IDENTIFIER, Project, TestCase } from '../../extension';
 import {
+  getAccountExtensionFieldMap,
   getRecords,
-  getProjectRecords,
+  indexKeyForKindAndParent,
 } from '../../lib/extensionFields/queries';
 import { BulkSyncState, SyncStage, SyncState } from '../../lib/sync/bulkSync';
+import SelectProject from './SelectProject';
 
 type Props = {
   syncData: BulkSyncState;
-  caseId: string;
+  selectedCaseIds: string[];
   caseIds: number[];
-  setCaseId: (caseId: string) => Promise<void>;
-};
-
-const caseOptions: (
-  projects: Project[],
-  caseMapping: {
-    [projectId: string]: TestCase[];
-  },
-  caseIds: number[]
-) => TreeNode[] = (projects, caseMapping, caseIds) => {
-  const options: TreeNode[] = [];
-  let idMapping: { [caseId: number]: boolean } = [];
-
-  if (caseIds && caseIds.length) {
-    idMapping = caseIds.reduce((acc, id) => {
-      acc[id] = true;
-      return acc;
-    }, {});
-  }
-
-  for (const project of projects) {
-    const cases = caseMapping[project.id] || [];
-
-    const filteredCases = cases.filter(c => !idMapping[c.id]);
-
-    if (filteredCases.length === 0) continue;
-
-    const header: TreeNode = {
-      value: project.id.toString(),
-      text: project.name,
-      children: filteredCases.map(c => ({
-        text: c.title,
-        value: `${c.id}`,
-        date: c.createdOn * 1000,
-      })),
-    };
-
-    options.push(header);
-  }
-
-  return options;
+  updateSelectedCaseIds: (caseId: string, isSelected: boolean) => Promise<void>;
+  clearSelectedCaseIds: () => void;
 };
 
 const SelectTestCase: React.FC<Props> = ({
   syncData,
-  caseId,
+  selectedCaseIds,
   caseIds,
-  setCaseId,
+  updateSelectedCaseIds,
+  clearSelectedCaseIds,
 }) => {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(null); // True if syncing on initial load
   const [syncingCases, setSyncingCases] = useState(false); // True if there may be new cases to sync
 
-  const [caseTree, setCaseTree] = useState<TreeNode[]>([]);
+  const [projectId, setProjectId] = useState<number>();
+  const [projects, setProjects] = useState<Project[]>([]);
+
+  const [searchMapping, setSearchMapping] = useState<{
+    [projectId: number]: number[];
+  }>({});
 
   useEffect(() => {
-    const fetchCases = async () => {
+    const fetchSearchKeys = async () => {
       const projectIds = await aha.account.getExtensionField<number[]>(
         IDENTIFIER,
         'projectIds'
       );
 
-      const [caseMapping, projects] = await Promise.all([
-        getProjectRecords<TestCase>(projectIds, 'TestCase'),
-        getRecords<Project>(projectIds, 'Project'),
-      ]);
+      const fetchedProjects = (
+        await getRecords<Project>(projectIds, 'Project')
+      ).reverse();
 
-      setCaseTree(caseOptions(projects, caseMapping, caseIds));
-      setLoading(false);
+      if (fetchedProjects?.length > 0 && !projectId) {
+        setProjectId(() => fetchedProjects[0].id);
+      }
+
+      const keys = fetchedProjects.map(project =>
+        indexKeyForKindAndParent('TestCase', project.id)
+      );
+
+      const mapping = await getAccountExtensionFieldMap<number[]>(keys);
+      setSearchMapping(() => mapping);
+
+      setProjects(() => fetchedProjects);
+      setLoading(() => false);
     };
 
     if (syncData && syncing === null) {
-      setSyncing(syncData.state !== SyncState.Complete);
+      setSyncing(() => syncData.state !== SyncState.Complete);
     }
 
     const lastState = syncingCases;
@@ -92,19 +71,84 @@ const SelectTestCase: React.FC<Props> = ({
 
     if (syncData) {
       currentState = syncData.stage <= SyncStage.TestCases;
-      setSyncingCases(currentState);
+      setSyncingCases(() => currentState);
     }
 
     // Fetch data on first load or if new cases potentially synced
-    if (loading || (lastState && !currentState)) fetchCases();
+    if (loading || (lastState && !currentState)) fetchSearchKeys();
   }, [syncData]);
+
+  const setProject: (e: React.ChangeEvent<HTMLSelectElement>) => Promise<void> =
+    useCallback(
+      async event => {
+        const id = Number.parseInt(event.target.value);
+        setProjectId(() => id);
+        clearSelectedCaseIds();
+      },
+      [clearSelectedCaseIds]
+    );
+
+  const buildTree: (
+    fields: Aha.ExtensionField[],
+    referenceMatches: number[]
+  ) => Promise<TreeNode[]> = useCallback(
+    async (fields, referenceMatches) => {
+      let children = fields.map(field => field.value as TestCase);
+
+      const casesToFetch = referenceMatches.filter(
+        id => !children.some(child => child.id === id)
+      );
+
+      if (casesToFetch.length > 0) {
+        const records = await getRecords<TestCase>(casesToFetch, 'TestCase');
+        children = children.concat(records);
+      }
+
+      children.sort((a, b) => b.id - a.id);
+
+      const nodes = children.map(record => ({
+        value: record.id.toString(),
+        text: record.title,
+        date: record.createdOn * 1000,
+      }));
+
+      const project = projects.find(p => p.id === projectId);
+
+      if (!project || nodes.length === 0) {
+        return [];
+      }
+
+      return [
+        {
+          value: projectId.toString(),
+          text: project.name,
+          children: nodes,
+        },
+      ];
+    },
+    [projects, projectId]
+  );
+
+  const searchIds = useMemo(
+    () => searchMapping[indexKeyForKindAndParent('TestCase', projectId)] || [],
+    [searchMapping, projectId]
+  );
 
   return (
     <div className='search-form'>
-      <SearchByName
-        tree={caseTree}
-        selected={[caseId]}
-        onSelect={setCaseId}
+      <SelectProject
+        projects={projects}
+        projectId={projectId}
+        setProject={setProject}
+      />
+      <ApiSearch
+        searchIds={searchIds}
+        selected={selectedCaseIds}
+        linkedIds={caseIds}
+        searchKind={'TestCase'}
+        searchKey={'title'}
+        onSelect={updateSelectedCaseIds}
+        buildTree={buildTree}
         recordName='test case'
         referencePrefix='C'
         loading={loading}
@@ -112,7 +156,7 @@ const SelectTestCase: React.FC<Props> = ({
         placeholder='No synced test cases found.'
       >
         {syncing && <SyncProgress syncData={syncData} />}
-      </SearchByName>
+      </ApiSearch>
     </div>
   );
 };

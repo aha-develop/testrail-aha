@@ -1,26 +1,45 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, {
+  useCallback,
+  useState,
+  useEffect,
+  useMemo,
+  useRef,
+} from 'react';
+import { IDENTIFIER, Project, TestRun } from '../../extension';
 import { ExtensionRecord } from '../../lib/extensionRecord';
 import { BulkSyncState } from '../../lib/sync/bulkSync';
-import SelectTestCase from './SelectTestCase';
+import SelectProject from './SelectProject';
+import SelectTestRun from './SelectTestRun';
 import SelectTest from './SelectTest';
-import { linkRecord } from '../../lib/extensionFields/updates';
+import { getRecords } from '../../lib/extensionFields/queries';
+import { linkRecords } from '../../lib/extensionFields/updates';
 
 type Props = {
   record: ExtensionRecord;
   caseIds: number[];
+  testIds: number[];
   syncData: BulkSyncState;
   onClose: () => void;
 };
 
-const LinkTest: React.FC<Props> = ({ record, caseIds, syncData, onClose }) => {
+const LinkTest: React.FC<Props> = ({
+  record,
+  caseIds,
+  testIds,
+  syncData,
+  onClose,
+}) => {
   const modalRef = useRef(null);
   const [saving, setSaving] = useState(false);
 
-  const [caseId, setCaseId] = useState<string>(null);
-  const [testId, setTestId] = useState<string>(null);
-  const [caseStep, setCaseStep] = useState<boolean>(true);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [projectId, setProjectId] = useState<number>(null);
 
-  const testIdRef = useRef(testId);
+  const [run, setRun] = useState<TestRun>(null);
+  const [selected, setSelected] = useState<
+    { caseId: number; testId: number }[]
+  >([]);
+  const [runStep, setRunStep] = useState<boolean>(true);
 
   useEffect(() => {
     const modal = modalRef.current;
@@ -31,22 +50,91 @@ const LinkTest: React.FC<Props> = ({ record, caseIds, syncData, onClose }) => {
     };
   }, []);
 
-  const updateTestId = async value => {
-    testIdRef.current = value;
-    setTestId(value);
-  };
+  useEffect(() => {
+    const fetchProjects = async () => {
+      const projectIds = await aha.account.getExtensionField<number[]>(
+        IDENTIFIER,
+        'projectIds'
+      );
 
-  const submit = async () => {
-    if (!testIdRef.current) return;
+      const fetchedProjects = (
+        await getRecords<Project>(projectIds, 'Project')
+      ).reverse();
 
-    setSaving(true);
+      if (fetchedProjects?.length > 0 && !projectId) {
+        setProjectId(() => fetchedProjects[0].id);
+      }
 
-    await linkRecord(record, Number.parseInt(caseId), 'caseIds');
-    await linkRecord(record, Number.parseInt(testIdRef.current), 'testIds');
+      setProjects(() => fetchedProjects);
+    };
 
-    setSaving(false);
+    fetchProjects();
+  }, []);
+
+  const submit = useCallback(async () => {
+    if (!selected.length) return;
+
+    setSaving(() => true);
+
+    await linkRecords(
+      record,
+      selected.map(({ caseId }) => caseId),
+      'caseIds'
+    );
+
+    await linkRecords(
+      record,
+      selected.map(({ testId }) => testId),
+      'testIds'
+    );
+
+    setSaving(() => false);
     onClose();
-  };
+  }, [record, onClose, selected]);
+
+  const setProject = useCallback(
+    async (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const id = Number.parseInt(e.target.value);
+      setProjectId(() => id);
+      setRun(() => null);
+      setSelected(() => []);
+    },
+    []
+  );
+
+  const updateSelectedRun = useCallback(
+    async (_value: string, isSelected: boolean, meta: TestRun) => {
+      if (!isSelected) {
+        setRun(() => null);
+      } else {
+        setRun(() => meta);
+      }
+
+      setSelected(() => []);
+    },
+    []
+  );
+
+  const selectedRunIds = useMemo(() => {
+    return run ? [run.id.toString()] : [];
+  }, [run]);
+
+  const updateSelected = useCallback(
+    async (value: string, isSelected: boolean, meta: number) => {
+      setSelected(prev => {
+        if (isSelected) {
+          return [...prev, { testId: Number.parseInt(value), caseId: meta }];
+        } else {
+          return prev.filter(item => item.caseId !== meta);
+        }
+      });
+    },
+    [setSelected]
+  );
+
+  const selectedTestIds = useMemo(() => {
+    return selected.map(item => item.testId.toString());
+  }, [selected]);
 
   return (
     <aha-modal ref={modalRef} open position='h-center' size='medium'>
@@ -60,50 +148,60 @@ const LinkTest: React.FC<Props> = ({ record, caseIds, syncData, onClose }) => {
             finished.
           </aha-alert>
         )}
-        <div style={{ display: caseStep ? 'block' : 'none' }}>
-          <SelectTestCase
-            syncData={syncData}
-            caseId={caseId}
-            caseIds={caseIds}
-            setCaseId={async (value: string) => setCaseId(value)}
-          />
+        <div style={{ display: runStep ? 'block' : 'none' }}>
+          <div className='search-form'>
+            <SelectProject
+              projects={projects}
+              projectId={projectId}
+              setProject={setProject}
+            />
+            <SelectTestRun
+              syncData={syncData}
+              runIds={[]}
+              projects={projects}
+              projectId={projectId}
+              selectedRunIds={selectedRunIds}
+              updateSelectedRuns={updateSelectedRun}
+            />
+          </div>
         </div>
-        <div style={{ display: caseStep ? 'none' : 'block' }}>
+        <div style={{ display: runStep ? 'none' : 'block' }}>
           <SelectTest
             syncData={syncData}
-            caseId={caseId}
-            testId={testId}
-            updateTestId={updateTestId}
+            caseIds={caseIds}
+            linkedIds={testIds}
+            selectedTestIds={selectedTestIds}
+            run={run}
+            updateSelectedTestIds={updateSelected}
           />
         </div>
       </aha-modal-body>
       <aha-modal-footer>
-        <div style={{ display: caseStep ? 'block' : 'none' }}>
+        <div style={{ display: runStep ? 'block' : 'none' }}>
           <aha-button
             kind='primary'
-            disabled={!caseId ? true : null}
-            onClick={() => setCaseStep(false)}
+            disabled={!run ? true : null}
+            onClick={() => setRunStep(false)}
           >
             Next
           </aha-button>
         </div>
         <div
           className='search-column'
-          style={{ display: caseStep ? 'none' : 'flex' }}
+          style={{ display: runStep ? 'none' : 'flex' }}
         >
           <aha-button
             kind='primary'
             disabled={saving ? true : null}
             onClick={() => {
-              setCaseStep(true);
-              updateTestId(null);
+              setRunStep(true);
             }}
           >
             Back
           </aha-button>
           <aha-button
             kind='primary'
-            disabled={saving || !testId ? true : null}
+            disabled={saving || !selectedTestIds.length ? true : null}
             onClick={submit}
           >
             {saving ? 'Linking...' : 'Link to test'}
