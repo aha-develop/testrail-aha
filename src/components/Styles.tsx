@@ -353,6 +353,30 @@ export const Styles = () => {
         .ignore-button {
           padding-bottom: var(--spacer-2);
         }
+
+        .create-form {
+          display: flex;
+          flex-direction: column;
+          gap: var(--spacer-3);
+          margin-bottom: 20px;
+        }
+
+        .form-field {
+          display: flex;
+          gap: 20px;
+          align-items: center;
+        }
+
+        .field-label {
+          font-weight: 500;
+          font-size: var(--font-size-100);
+          line-height: var(--line-height-t-050);
+          width: 110px;
+        }
+
+        .full-width {
+          flex-grow: 1;
+        }
       `}
     </style>
   );
