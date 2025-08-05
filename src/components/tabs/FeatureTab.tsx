@@ -135,6 +135,7 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   // Prevent errors if a linked record was deleted (e.g. from the suite ignore-list)
   const existingCaseIds = testCases.map(testCase => testCase.id);
   const existingRunIds = runs.map(run => run.id);
+  const existingTestIds = Object.values(tests).map(test => test.id);
 
   if (testCases.length > 0) {
     caseRows = testCases.map(testCase => {
@@ -243,6 +244,7 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
           <LinkTest
             record={record}
             caseIds={existingCaseIds}
+            testIds={existingTestIds}
             syncData={syncData}
             onClose={onClose(setLinkTestModalOpen)}
           />

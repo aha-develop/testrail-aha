@@ -18,15 +18,27 @@ export const linkRecord: (
   id: number,
   key: string
 ) => Promise<void> = async (record, id, key) => {
-  let existingIds = await record.getExtensionField<number[]>(IDENTIFIER, key);
+  linkRecords(record, [id], key);
+};
 
-  if (!existingIds) existingIds = [];
+export const linkRecords: (
+  record: ExtensionRecord,
+  ids: number[],
+  key: string
+) => Promise<void> = async (record, ids, key) => {
+  if (ids.length === 0) return;
 
-  if (existingIds.includes(id)) return;
+  let indexField = await record.getExtensionField<number[]>(IDENTIFIER, key);
 
-  existingIds.push(id);
+  if (!indexField) indexField = [];
 
-  await record.setExtensionField(IDENTIFIER, key, existingIds);
+  const existingIds = new Set(indexField);
+  ids = ids.filter(id => !existingIds.has(id));
+
+  if (ids.length === 0) return;
+
+  indexField = indexField.concat(ids);
+  await record.setExtensionField(IDENTIFIER, key, indexField);
 };
 
 export const unlinkRecord: (

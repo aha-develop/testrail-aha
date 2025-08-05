@@ -1,76 +1,61 @@
-import React, { useEffect, useState } from 'react';
-import { TestCase, Test } from '../../extension';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { IDENTIFIER, Test, TestCase, TestRun } from '../../extension';
 import { BulkSyncState, SyncStage, SyncState } from '../../lib/sync/bulkSync';
-import SearchByName, { TreeNode } from './SearchByName';
-import { getRunMapForTestCase } from '../../lib/extensionFields/queries';
+import ApiSearch, { TreeNode } from './ApiSearch';
+import { indexKeyForKindAndParent } from '../../lib/extensionFields/queries';
 import SyncProgress from '../SyncProgress';
 import { getRecords } from '../../lib/extensionFields/queries';
 
 type Props = {
-  caseId: string;
+  run: TestRun;
+  caseIds: number[];
+  linkedIds: number[];
   syncData: BulkSyncState;
-  testId: string;
-  updateTestId: (value: string) => Promise<void>;
+  selectedTestIds: string[];
+  updateSelectedTestIds: (
+    testId: string,
+    isSelected: boolean,
+    meta?: any
+  ) => Promise<void>;
 };
 
-// The tree displays runs, because there's no identifying data to separate
-// tests for the same case, and a run will have at most one test per test case.
-const runOptions: (
-  testCase: TestCase,
-  runMapping: [Test, string, number][]
-) => TreeNode[] = (testCase, runMapping) => {
-  const children = runMapping.map(([test, runName, createdOn]) => ({
-    value: test.id.toString(),
-    text: runName,
-    date: createdOn * 1000,
-  }));
-
-  if (children.length === 0) return [];
-
-  return [
-    {
-      value: testCase.id.toString(),
-      text: testCase.title,
-      children,
-    },
-  ];
-};
-
+// Given a test run, allows you to select multiple tests for that run
 const SelectTest: React.FC<Props> = ({
-  caseId,
+  run,
+  caseIds,
+  linkedIds,
   syncData,
-  testId,
-  updateTestId,
+  selectedTestIds,
+  updateSelectedTestIds,
 }) => {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(null);
   const [syncingTests, setSyncingTests] = useState(false);
 
-  const [runTree, setRunTree] = useState<TreeNode[]>([]);
+  const [lastRunId, setLastRunId] = useState<number>(run?.id);
+  const [tests, setTests] = useState<Test[]>([]);
 
-  const [savedCaseId, setSavedCaseId] = useState<string>(caseId);
+  const [searchIds, setSearchIds] = useState<number[]>([]);
 
   useEffect(() => {
-    const fetchRuns = async () => {
-      const [testCase] = await getRecords<TestCase>(
-        [Number.parseInt(caseId)],
-        'TestCase'
+    const fetchTests = async () => {
+      if (!run) return;
+
+      const testIds = await aha.account.getExtensionField<number[]>(
+        IDENTIFIER,
+        indexKeyForKindAndParent('Test', run.id)
       );
 
-      const runMapping = await getRunMapForTestCase(testCase);
+      const fetchedTests = await getRecords<Test>(testIds, 'Test');
+      setTests(() => fetchedTests);
 
-      setRunTree(runOptions(testCase, runMapping));
-      setLoading(false);
+      // Tests don't have a name/title, so we use test cases for search
+      setSearchIds(() => fetchedTests.map(test => test.caseId));
+      setLoading(() => false);
     };
 
-    const caseIdChanged = caseId !== savedCaseId;
-
-    if (caseIdChanged) {
-      setSavedCaseId(caseId);
-    }
-
     if (syncData && syncing === null) {
-      setSyncing(syncData.state !== SyncState.Complete);
+      setSyncing(() => syncData.state !== SyncState.Complete);
     }
 
     const lastState = syncingTests;
@@ -78,34 +63,115 @@ const SelectTest: React.FC<Props> = ({
 
     if (syncData) {
       currentState = syncData.stage <= SyncStage.Tests;
-      setSyncingTests(currentState);
+      setSyncingTests(() => currentState);
     }
+
+    const runIdChanged = lastRunId !== run?.id;
+    if (runIdChanged) setLastRunId(() => run?.id);
 
     // Load on first render if caseId changes, or if new tests potentially synced
     const shouldLoad =
-      caseId && (loading || caseIdChanged || (lastState && !currentState));
+      run && (loading || runIdChanged || (lastState && !currentState));
 
-    if (caseId && caseIdChanged) {
-      setLoading(true);
+    if (run && runIdChanged) {
+      setLoading(() => true);
     }
 
-    if (shouldLoad) fetchRuns();
-  }, [caseId, syncData]);
+    if (shouldLoad) fetchTests();
+  }, [run, syncData]);
+
+  const caseIdsSet = useMemo(() => new Set(caseIds), [caseIds]);
+  const linkedIdsSet = useMemo(() => new Set(linkedIds), [linkedIds]);
+
+  const buildTree: (
+    fields: Aha.ExtensionField[],
+    referenceMatches: number[]
+  ) => Promise<TreeNode[]> = useCallback(
+    async (fields, referenceMatches) => {
+      const matchedCases = fields.map(field => field.value as TestCase);
+
+      const caseMap: { [caseId: number]: TestCase } = matchedCases.reduce(
+        (map, testCase) => {
+          map[testCase.id] = testCase;
+          return map;
+        },
+        {}
+      );
+
+      let children = tests.filter(test => caseMap[test.caseId]);
+
+      const referenceMatchedTests = new Set(
+        referenceMatches.filter(id => !children.some(child => child.id === id))
+      );
+
+      if (referenceMatchedTests.size > 0) {
+        const records = tests.filter(test =>
+          referenceMatchedTests.has(test.id)
+        );
+
+        const casesToFetch = [];
+        records.forEach(test => {
+          if (!caseMap[test.caseId]) {
+            casesToFetch.push(test.caseId);
+          }
+        });
+
+        const cases = await getRecords<TestCase>(casesToFetch, 'TestCase');
+
+        children = children.concat(records);
+        cases.forEach(testCase => {
+          caseMap[testCase.id] = testCase;
+        });
+      }
+
+      // If a match is for a linked test, show it as linked, but if
+      // a match is for a linked case and an unknown test, hide it so the user can't
+      // overwrite their linked tests.
+      children = children.filter(
+        test => linkedIdsSet.has(test.id) || !caseIdsSet.has(test.caseId)
+      );
+
+      children.sort((a, b) => b.id - a.id);
+
+      const nodes = children.map(record => ({
+        value: record.id.toString(),
+        text: caseMap[record.caseId]?.title,
+        meta: record.caseId,
+      }));
+
+      if (!run || nodes.length === 0) {
+        return [];
+      }
+
+      return [
+        {
+          value: run.id.toString(),
+          text: run.name,
+          children: nodes,
+        },
+      ];
+    },
+    [run, tests]
+  );
 
   return (
     <div className='search-form'>
-      <SearchByName
-        tree={runTree}
-        selected={[testId]}
-        onSelect={updateTestId}
+      <ApiSearch
+        searchIds={searchIds}
+        selected={selectedTestIds}
+        linkedIds={linkedIds}
+        searchKind={'TestCase'}
+        searchKey={'title'}
+        onSelect={updateSelectedTestIds}
+        buildTree={buildTree}
         recordName='test'
         referencePrefix='T'
         loading={loading}
         label='Select a test'
-        placeholder='No tests found for this test case.'
+        placeholder='No synced tests found.'
       >
         {syncing && <SyncProgress syncData={syncData} />}
-      </SearchByName>
+      </ApiSearch>
     </div>
   );
 };

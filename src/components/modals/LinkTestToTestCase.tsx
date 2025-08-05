@@ -1,9 +1,19 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { TestCase } from '../../extension';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useRef,
+} from 'react';
+import { IDENTIFIER, Project, Test, TestCase, TestRun } from '../../extension';
 import { BulkSyncState } from '../../lib/sync/bulkSync';
 import { ExtensionRecord } from '../../lib/extensionRecord';
+import {
+  getRecords,
+  indexKeyForKindAndParent,
+} from '../../lib/extensionFields/queries';
 import { linkRecord } from '../../lib/extensionFields/updates';
-import SelectTest from './SelectTest';
+import SelectTestRun from './SelectTestRun';
 
 type Props = {
   record: ExtensionRecord;
@@ -20,9 +30,24 @@ const LinkTestToTestCase: React.FC<Props> = ({
 }) => {
   const modalRef = useRef(null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [projects, setProjects] = useState<Project[]>([]);
 
-  const [testId, setTestId] = useState<string>(null);
-  const testIdRef = useRef(testId);
+  const [runId, setRunId] = useState<string>(null);
+
+  useEffect(() => {
+    const fetchProjects = async () => {
+      const projectIds = await aha.account.getExtensionField<number[]>(
+        IDENTIFIER,
+        'projectIds'
+      );
+
+      const fetchedProjects = await getRecords<Project>(projectIds, 'Project');
+      setProjects(() => fetchedProjects);
+    };
+
+    fetchProjects();
+  }, []);
 
   useEffect(() => {
     const modal = modalRef.current;
@@ -33,21 +58,64 @@ const LinkTestToTestCase: React.FC<Props> = ({
     };
   }, []);
 
-  const updateTestId = async value => {
-    testIdRef.current = value;
-    setTestId(value);
-  };
+  const selectedRunIds = useMemo(() => {
+    return runId ? [runId] : [];
+  }, [runId]);
 
-  const submit = async () => {
-    if (!testIdRef.current) return;
+  const updateSelectedRun = useCallback(
+    async (value: string, isSelected: boolean) => {
+      if (!isSelected) {
+        setRunId(() => null);
+      } else {
+        setRunId(() => value);
+      }
+    },
+    []
+  );
 
-    setSaving(true);
+  // We can filter out runs that don't match the test case's suite or were created
+  // before the test case was created.
+  // This should reduce the chance of showing a run that doesn't have a matching test for the case.
+  const filterRuns = useCallback(
+    (run: TestRun) =>
+      run.suiteId === testCase.suiteId && run.createdOn >= testCase.createdOn,
+    [testCase]
+  );
 
-    await linkRecord(record, Number.parseInt(testIdRef.current), 'testIds');
+  const submit = useCallback(async () => {
+    if (!runId) return;
 
-    setSaving(false);
+    setSaving(() => true);
+
+    const testIds = await aha.account.getExtensionField<number[]>(
+      IDENTIFIER,
+      indexKeyForKindAndParent('Test', Number.parseInt(runId))
+    );
+
+    if (!testIds || !testIds.length) {
+      setSaving(() => false);
+      setError(() => 'No test results found for the selected run.');
+      return;
+    }
+
+    const tests = await getRecords<Test>(testIds, 'Test');
+    const testId = tests.find(test => test.caseId === testCase.id)?.id;
+
+    if (!testId) {
+      setSaving(() => false);
+      setError(
+        () =>
+          'Selected run has no results for linked test case. Please choose a different run.'
+      );
+      return;
+    }
+
+    await linkRecord(record, testId, 'testIds');
+
+    setSaving(() => false);
+    setError(() => null);
     onClose();
-  };
+  }, [record, runId, testCase]);
 
   return (
     <aha-modal ref={modalRef} open position='h-center' size='medium'>
@@ -63,17 +131,28 @@ const LinkTestToTestCase: React.FC<Props> = ({
             finished.
           </aha-alert>
         )}
-        <SelectTest
-          caseId={testCase.id.toString()}
-          syncData={syncData}
-          testId={testId}
-          updateTestId={updateTestId}
-        />
+        {error && (
+          <aha-alert class='mb-5' type='danger'>
+            <div slot='heading'>Error linking test case to test</div>
+            {error}
+          </aha-alert>
+        )}
+        <div className='search-form'>
+          <SelectTestRun
+            syncData={syncData}
+            runIds={[]}
+            projects={projects}
+            projectId={testCase.projectId}
+            selectedRunIds={selectedRunIds}
+            updateSelectedRuns={updateSelectedRun}
+            filter={filterRuns}
+          />
+        </div>
       </aha-modal-body>
       <aha-modal-footer>
         <aha-button
           kind='primary'
-          disabled={saving || !testId ? true : null}
+          disabled={saving || !runId ? true : null}
           onClick={submit}
         >
           {saving ? 'Linking...' : 'Link to test'}

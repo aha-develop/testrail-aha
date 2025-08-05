@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useRef } from 'react';
 import { ExtensionRecord } from '../../lib/extensionRecord';
 import { BulkSyncState } from '../../lib/sync/bulkSync';
 import SelectTestCase from './SelectTestCase';
-import { linkRecord } from '../../lib/extensionFields/updates';
+import { linkRecords } from '../../lib/extensionFields/updates';
 
 type Props = {
   record: ExtensionRecord;
@@ -19,15 +19,8 @@ const LinkTestCase: React.FC<Props> = ({
 }) => {
   const modalRef = useRef(null);
 
-  const [caseId, setCaseId] = useState<string>(null);
+  const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-
-  const caseIdRef = useRef<string>(null);
-
-  const updateCaseId = async (value: string) => {
-    caseIdRef.current = value;
-    setCaseId(value);
-  };
 
   useEffect(() => {
     const modal = modalRef.current;
@@ -38,16 +31,42 @@ const LinkTestCase: React.FC<Props> = ({
     };
   }, [onClose]);
 
-  const submit = async () => {
-    if (!caseIdRef.current) return;
+  const submit = useCallback(async () => {
+    setSaving(() => true);
 
-    setSaving(true);
+    await linkRecords(
+      record,
+      selectedCaseIds.map(id => Number.parseInt(id)),
+      'caseIds'
+    );
 
-    await linkRecord(record, Number.parseInt(caseIdRef.current), 'caseIds');
-
-    setSaving(false);
+    setSaving(() => false);
     onClose();
-  };
+  }, [record, selectedCaseIds, onClose]);
+
+  const updateSelectedCaseIds: (
+    value: string,
+    isSelected: boolean
+  ) => Promise<void> = useCallback(
+    async (value: string, isSelected: boolean) => {
+      setSelectedCaseIds(prev => {
+        if (caseIds.includes(Number.parseInt(value))) {
+          return prev;
+        }
+
+        if (isSelected) {
+          return [...prev, value];
+        } else {
+          return prev.filter(id => id !== value);
+        }
+      });
+    },
+    [caseIds]
+  );
+
+  const clearSelectedCaseIds = useCallback(() => {
+    setSelectedCaseIds(() => []);
+  }, []);
 
   return (
     <aha-modal ref={modalRef} open position='h-center' size='medium'>
@@ -66,14 +85,15 @@ const LinkTestCase: React.FC<Props> = ({
         <SelectTestCase
           caseIds={caseIds}
           syncData={syncData}
-          caseId={caseId}
-          setCaseId={updateCaseId}
+          selectedCaseIds={selectedCaseIds}
+          updateSelectedCaseIds={updateSelectedCaseIds}
+          clearSelectedCaseIds={clearSelectedCaseIds}
         />
       </aha-modal-body>
       <aha-modal-footer>
         <aha-button
           kind='primary'
-          disabled={saving || !caseId ? true : null}
+          disabled={saving || !selectedCaseIds.length ? true : null}
           onClick={submit}
         >
           {saving ? 'Linking...' : 'Link to test case'}
