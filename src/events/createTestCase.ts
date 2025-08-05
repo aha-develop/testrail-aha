@@ -5,6 +5,9 @@ type CreateProps = BaseParams & {
   projectId: number;
   sectionId: number;
   title: string;
+  precondition: string;
+  steps: string;
+  results: string;
 };
 
 const createTestCase: (props: CreateProps) => Promise<void> = async ({
@@ -12,6 +15,9 @@ const createTestCase: (props: CreateProps) => Promise<void> = async ({
   projectId,
   sectionId,
   title,
+  precondition,
+  steps,
+  results,
   record,
   eventKey,
 }) => {
@@ -20,7 +26,13 @@ const createTestCase: (props: CreateProps) => Promise<void> = async ({
       `Beginning TestRail test case create for section: ${sectionId}`
     );
 
-    const body = { title };
+    const body = {
+      title,
+      template_id: 1,
+      custom_preconds: precondition,
+      custom_steps: steps,
+      custom_expected: results,
+    };
 
     const json = await fetchTestRail({
       domain,
@@ -61,13 +73,25 @@ const createTestCase: (props: CreateProps) => Promise<void> = async ({
 
 aha.on(
   { event: `${IDENTIFIER}.createTestCase` },
-  async ({ domain, eventKey, projectId, sectionId, title }) => {
+  async ({
+    domain,
+    eventKey,
+    projectId,
+    sectionId,
+    title,
+    precondition,
+    steps,
+    results,
+  }) => {
     await createTestCase({
       record: aha.account,
       domain,
       projectId,
       sectionId,
       title,
+      precondition,
+      steps,
+      results,
       eventKey,
     });
   }

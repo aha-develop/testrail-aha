@@ -23,6 +23,9 @@ type CreateProps = {
   domain: string;
   record: ExtensionRecord;
   title: string;
+  precondition: string;
+  steps: string;
+  results: string;
   sectionId: string;
   projectId: string;
   setSaving: (saving: boolean) => void;
@@ -146,6 +149,9 @@ const createTestCase: (props: CreateProps) => Promise<boolean> = async ({
   record,
   domain,
   title,
+  precondition,
+  steps,
+  results,
   sectionId,
   projectId,
   setSaving,
@@ -166,6 +172,9 @@ const createTestCase: (props: CreateProps) => Promise<boolean> = async ({
   const args = {
     domain,
     title,
+    precondition,
+    steps,
+    results,
     sectionId: sectionIdNum,
     projectId: projectIdNum,
   };
@@ -198,8 +207,14 @@ const CreateTestCase: React.FC<Props> = ({
 }) => {
   const modalRef = useRef(null);
   const titleRef = useRef(null);
+  const preconditionRef = useRef(null);
+  const stepsRef = useRef(null);
+  const resultsRef = useRef(null);
 
-  const [title, setTitle] = useState('');
+  const [title, setTitle] = useState<string>('');
+  const [precondition, setPrecondition] = useState<string>('');
+  const [steps, setSteps] = useState<string>('');
+  const [results, setResults] = useState<string>('');
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -227,6 +242,9 @@ const CreateTestCase: React.FC<Props> = ({
       domain,
       record,
       title: titleRef.current.value,
+      precondition: preconditionRef.current.value,
+      steps: stepsRef.current.value,
+      results: resultsRef.current.value,
       sectionId: sectionIdRef.current,
       projectId: projectIdRef.current,
       setSaving,
@@ -298,15 +316,43 @@ const CreateTestCase: React.FC<Props> = ({
             please contact <a href='mailto:support@aha.io'>support@aha.io</a>.
           </aha-alert>
         )}
-        <aha-field class='left-align-input' required>
-          <div slot='label'>Name</div>
-          <input
-            ref={titleRef}
-            type='text'
-            placeholder='Enter test case name'
-            onInput={event => setTitle(event.target.value)}
-          />
-        </aha-field>
+        <div class='create-form'>
+          <div class='form-field'>
+            <div class='field-label'>
+              Name<span class='label-required'>*</span>
+            </div>
+            <input
+              ref={titleRef}
+              type='text'
+              onInput={event => setTitle(event.target.value)}
+              class='full-width'
+            />
+          </div>
+          <div class='form-field'>
+            <div class='field-label'>Preconditions</div>
+            <textarea
+              ref={preconditionRef}
+              onInput={event => setPrecondition(event.target.value)}
+              class='full-width'
+            />
+          </div>
+          <div class='form-field'>
+            <div class='field-label'>Steps</div>
+            <textarea
+              ref={stepsRef}
+              onInput={event => setSteps(event.target.value)}
+              class='full-width'
+            />
+          </div>
+          <div class='form-field'>
+            <div class='field-label'>Expected results</div>
+            <textarea
+              ref={resultsRef}
+              onInput={event => setResults(event.target.value)}
+              class='full-width'
+            />
+          </div>
+        </div>
         <div className='search-form'>
           <SearchByName
             tree={sectionTree}
