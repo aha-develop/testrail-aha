@@ -308,13 +308,17 @@ export const waitForPagedLambda: <T>(
 
     if (isPaginated && usePage) {
       hasMore = fetchResults[fetchResults.length - 1].result?.hasMore;
+    } else {
+      hasMore = page <= ids.length;
+    }
+
+    if (isPaginated) {
       results.push(
         ...fetchResults.flatMap(
           result => (result as PagedAPIResult).result?.result ?? []
         )
       );
     } else {
-      hasMore = page <= ids.length;
       results.push(
         ...fetchResults.flatMap(result => (result as APIResult).result ?? [])
       );
