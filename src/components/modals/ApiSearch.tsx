@@ -7,6 +7,7 @@ import { fieldName } from '../../lib/extensionFields/queries';
 export type TreeNode = {
   value: string;
   text: string;
+  prefix?: string;
   date?: number;
   children?: TreeNode[];
   header?: boolean;
@@ -16,8 +17,6 @@ export type TreeNode = {
 type CommonProps = {
   selected: string[];
   linkedIds: number[];
-  showReference?: boolean;
-  referencePrefix?: string;
 };
 
 type Props = CommonProps & {
@@ -25,6 +24,7 @@ type Props = CommonProps & {
   searchIds: number[];
   searchKind: TestRailRecord['kind'];
   searchKey: string;
+  searchPrefix: string;
   buildTree: (
     fields: Aha.ExtensionField[],
     referenceMatches?: number[]
@@ -32,7 +32,7 @@ type Props = CommonProps & {
   onSelect: (value: string, isSelected: boolean, meta: any) => Promise<void>;
   recordName: string;
   loading: boolean;
-  placeholder: string;
+  nonePlaceholder: string;
   label: string;
 };
 
@@ -55,8 +55,6 @@ const ResultSection: React.FC<SectionProps> = ({
   linkedIds,
   key,
   onSelectBuilder,
-  showReference = true,
-  referencePrefix,
   nesting = 0,
 }) => {
   if (tree.children.length === 0) return null;
@@ -110,10 +108,11 @@ const ResultSection: React.FC<SectionProps> = ({
                     )}
 
                     <div className='search-text'>
-                      {showReference && (
-                        <div className='text-light text-gray'>{`${referencePrefix}${node.value}`}</div>
+                      {node.prefix && (
+                        <div className='text-light text-gray'>
+                          {node.prefix}
+                        </div>
                       )}
-
                       <div
                         className={node.children ? 'search-sub-header' : null}
                       >
@@ -137,8 +136,6 @@ const ResultSection: React.FC<SectionProps> = ({
                 linkedIds={linkedIds}
                 key={node.value}
                 onSelectBuilder={onSelectBuilder}
-                showReference={showReference}
-                referencePrefix={referencePrefix}
                 nesting={nesting + 1}
               />
             )}
@@ -159,10 +156,9 @@ const ApiSearch: React.FC<Props> = ({
   buildTree,
   children,
   recordName,
-  showReference = true,
-  referencePrefix,
+  searchPrefix,
   loading,
-  placeholder,
+  nonePlaceholder,
   label,
 }) => {
   const [query, setQuery] = useState<string>('');
@@ -195,18 +191,16 @@ const ApiSearch: React.FC<Props> = ({
 
       let referenceMatches = [];
 
-      if (showReference) {
-        const fixedQuery = query.trim().toUpperCase();
-        referenceMatches = searchIds
-          .map(id => `${referencePrefix}${id}`)
-          .filter(reference => reference.includes(fixedQuery));
-      }
+      const fixedQuery = query.trim().toUpperCase();
+      referenceMatches = searchIds.filter(id =>
+        `${searchPrefix}${id}`.includes(fixedQuery)
+      );
 
       const resultNodes = await buildTree(results, referenceMatches);
 
       setSearchResults(() => resultNodes);
     }, 250),
-    [searchNames, showReference, buildTree]
+    [searchNames, buildTree]
   );
 
   const onSelectBuilder: (
@@ -232,7 +226,7 @@ const ApiSearch: React.FC<Props> = ({
             style={{ width: '300px', margin: '0' }}
             ref={inputRef}
             type='text'
-            placeholder={`Search by ${recordName} name`}
+            placeholder={`Search by ${recordName} name or reference`}
             onInput={search}
           />
         </div>
@@ -244,7 +238,7 @@ const ApiSearch: React.FC<Props> = ({
               Start searching to show results
             </div>
           ) : searchResults.length === 0 ? (
-            <div className='search-placeholder'>{placeholder}</div>
+            <div className='search-placeholder'>{nonePlaceholder}</div>
           ) : (
             searchResults.map(header => (
               <ResultSection
@@ -254,8 +248,6 @@ const ApiSearch: React.FC<Props> = ({
                 linkedIds={linkedIds}
                 key={header.value}
                 onSelectBuilder={onSelectBuilder}
-                showReference={showReference}
-                referencePrefix={referencePrefix}
               />
             ))
           )}

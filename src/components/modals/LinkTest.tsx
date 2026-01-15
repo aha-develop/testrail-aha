@@ -5,7 +5,7 @@ import React, {
   useMemo,
   useRef,
 } from 'react';
-import { IDENTIFIER, Project, TestRun } from '../../extension';
+import { IDENTIFIER, Project, Test, TestRun } from '../../extension';
 import { ExtensionRecord } from '../../lib/extensionRecord';
 import { BulkSyncState } from '../../lib/sync/bulkSync';
 import SelectProject from './SelectProject';

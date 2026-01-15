@@ -37,6 +37,20 @@ const SelectTest: React.FC<Props> = ({
 
   const [searchIds, setSearchIds] = useState<number[]>([]);
 
+  // Needed to allow linking tests to a separately linked test case if the case has no linked tests
+  const [casesWithTests, setCasesWithTests] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    const fetchTests = async () => {
+      if (linkedIds.length === 0) return;
+
+      const fetchedTests = await getRecords<Test>(linkedIds, 'Test');
+      setCasesWithTests(() => new Set(fetchedTests.map(test => test.caseId)));
+    };
+
+    fetchTests();
+  }, [linkedIds]);
+
   useEffect(() => {
     const fetchTests = async () => {
       if (!run) return;
@@ -100,25 +114,18 @@ const SelectTest: React.FC<Props> = ({
 
       let children = tests.filter(test => caseMap[test.caseId]);
 
-      const referenceMatchedTests = new Set(
-        referenceMatches.filter(id => !children.some(child => child.id === id))
+      const casesToFetch = referenceMatches.filter(
+        id => !children.some(child => child.caseId === id)
       );
 
-      if (referenceMatchedTests.size > 0) {
-        const records = tests.filter(test =>
-          referenceMatchedTests.has(test.id)
+      if (casesToFetch.length > 0) {
+        const referencedTests = tests.filter(test =>
+          casesToFetch.includes(test.caseId)
         );
-
-        const casesToFetch = [];
-        records.forEach(test => {
-          if (!caseMap[test.caseId]) {
-            casesToFetch.push(test.caseId);
-          }
-        });
 
         const cases = await getRecords<TestCase>(casesToFetch, 'TestCase');
 
-        children = children.concat(records);
+        children = children.concat(referencedTests);
         cases.forEach(testCase => {
           caseMap[testCase.id] = testCase;
         });
@@ -128,7 +135,10 @@ const SelectTest: React.FC<Props> = ({
       // a match is for a linked case and an unknown test, hide it so the user can't
       // overwrite their linked tests.
       children = children.filter(
-        test => linkedIdsSet.has(test.id) || !caseIdsSet.has(test.caseId)
+        test =>
+          linkedIdsSet.has(test.id) ||
+          (caseIdsSet.has(test.caseId) && !casesWithTests.has(test.caseId)) ||
+          !caseIdsSet.has(test.caseId)
       );
 
       children.sort((a, b) => b.id - a.id);
@@ -136,6 +146,7 @@ const SelectTest: React.FC<Props> = ({
       const nodes = children.map(record => ({
         value: record.id.toString(),
         text: caseMap[record.caseId]?.title,
+        prefix: `C${record.caseId} - T${record.id}`,
         meta: record.caseId,
       }));
 
@@ -151,7 +162,7 @@ const SelectTest: React.FC<Props> = ({
         },
       ];
     },
-    [run, tests]
+    [run, tests, linkedIds]
   );
 
   return (
@@ -164,11 +175,11 @@ const SelectTest: React.FC<Props> = ({
         searchKey={'title'}
         onSelect={updateSelectedTestIds}
         buildTree={buildTree}
-        recordName='test'
-        referencePrefix='T'
+        recordName='test case'
+        searchPrefix='C'
         loading={loading}
         label='Select a test'
-        placeholder='No synced tests found.'
+        nonePlaceholder='No synced tests found.'
       >
         {syncing && <SyncProgress syncData={syncData} />}
       </ApiSearch>

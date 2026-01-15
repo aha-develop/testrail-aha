@@ -109,6 +109,7 @@ const SelectTestRun: React.FC<Props> = ({
       const nodes = children.map(record => ({
         value: record.id.toString(),
         text: record.name,
+        prefix: `R${record.id}`,
         date: record.createdOn * 1000,
         meta: record,
       }));
@@ -145,10 +146,10 @@ const SelectTestRun: React.FC<Props> = ({
       onSelect={updateSelectedRuns}
       buildTree={buildTree}
       recordName='test run'
-      referencePrefix='R'
+      searchPrefix='R'
       loading={loading}
       label='Select a test run'
-      placeholder='No synced test runs found.'
+      nonePlaceholder='No synced test runs found.'
     >
       {syncing && <SyncProgress syncData={syncData} />}
     </ApiSearch>

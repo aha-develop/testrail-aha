@@ -359,7 +359,6 @@ const CreateTestCase: React.FC<Props> = ({
             selected={[sectionId]}
             onSelect={updateSectionId}
             recordName='section'
-            showReference={false}
             loading={loading}
             label='Select a section'
             placeholder='No synced sections found.'
