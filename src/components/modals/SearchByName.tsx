@@ -12,8 +12,6 @@ export type TreeNode = {
 
 type CommonProps = {
   selected: string[];
-  showReference?: boolean;
-  referencePrefix?: string;
 };
 
 type Props = CommonProps & {
@@ -40,16 +38,12 @@ const ResultSection: React.FC<SectionProps> = ({
   selected,
   key,
   onSelectBuilder,
-  showReference = true,
-  referencePrefix,
   nesting = 0,
 }) => {
   let filtered = tree.children;
 
   const matchesQuery = (node: TreeNode): boolean => {
-    const queryText = showReference
-      ? `${referencePrefix}${node.value}${node.text}`
-      : node.text;
+    const queryText = node.text;
 
     return (
       node.children?.some(child => matchesQuery(child)) ||
@@ -96,10 +90,6 @@ const ResultSection: React.FC<SectionProps> = ({
                   )}
 
                   <div className='search-text'>
-                    {showReference && (
-                      <div className='text-light text-gray'>{`${referencePrefix}${node.value}`}</div>
-                    )}
-
                     <div className={node.children ? 'search-sub-header' : null}>
                       {node.text}
                     </div>
@@ -120,8 +110,6 @@ const ResultSection: React.FC<SectionProps> = ({
               selected={selected}
               key={node.value}
               onSelectBuilder={onSelectBuilder}
-              showReference={showReference}
-              referencePrefix={referencePrefix}
               nesting={nesting + 1}
             />
           )}
@@ -137,8 +125,6 @@ const SearchByName: React.FC<Props> = ({
   onSelect,
   children,
   recordName,
-  showReference = true,
-  referencePrefix,
   loading,
   placeholder,
   label,
@@ -187,8 +173,6 @@ const SearchByName: React.FC<Props> = ({
                 selected={selected}
                 key={header.value}
                 onSelectBuilder={onSelectBuilder}
-                showReference={showReference}
-                referencePrefix={referencePrefix}
               />
             ))
           )}

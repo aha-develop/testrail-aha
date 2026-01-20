@@ -109,6 +109,7 @@ const SelectTestCase: React.FC<Props> = ({
       const nodes = children.map(record => ({
         value: record.id.toString(),
         text: record.title,
+        prefix: `C${record.id}`,
         date: record.createdOn * 1000,
       }));
 
@@ -150,10 +151,10 @@ const SelectTestCase: React.FC<Props> = ({
         onSelect={updateSelectedCaseIds}
         buildTree={buildTree}
         recordName='test case'
-        referencePrefix='C'
+        searchPrefix='C'
         loading={loading}
         label='Select a test case'
-        placeholder='No synced test cases found.'
+        nonePlaceholder='No synced test cases found.'
       >
         {syncing && <SyncProgress syncData={syncData} />}
       </ApiSearch>
