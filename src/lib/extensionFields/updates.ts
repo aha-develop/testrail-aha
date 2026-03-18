@@ -109,17 +109,13 @@ const updateRecordIndexes: <T extends TestRailRecord>(
     keyMap[indexKey].push(record);
   }
 
-  const existingIndexes = await getAccountExtensionFieldMap<number[]>(
-    Object.keys(keyMap)
-  );
-
   const fields = [];
 
   for (const key in keyMap) {
-    let allIds = existingIndexes[key] ?? [];
-    allIds.push(...keyMap[key].map(record => record.id));
-
-    fields.push([key, Array.from(new Set(allIds))]);
+    fields.push([
+      key,
+      Array.from(new Set(keyMap[key].map(record => record.id))),
+    ]);
   }
 
   await saveChunked(fields);

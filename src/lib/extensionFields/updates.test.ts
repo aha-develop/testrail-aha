@@ -140,7 +140,7 @@ describe('saveRecords', () => {
     });
 
     expect(mockSetExtensionFields).toHaveBeenNthCalledWith(2, IDENTIFIER, {
-      project_100_caseIds: [3, 4, 1],
+      project_100_caseIds: [1],
       project_200_caseIds: [2],
     });
   });
@@ -183,10 +183,6 @@ describe('saveNewRuns', () => {
       run_2: { completed: true },
     });
 
-    mockGetExtensionMap.mockResolvedValueOnce({
-      project_100_runIds: [3, 4],
-    });
-
     const result = await saveNewRuns(runs);
 
     expect(result).toHaveLength(1);
@@ -197,7 +193,7 @@ describe('saveNewRuns', () => {
     });
 
     expect(mockSetExtensionFields).toHaveBeenNthCalledWith(2, IDENTIFIER, {
-      project_100_runIds: [3, 4, 1],
+      project_100_openRunIds: [1],
     });
   });
 
