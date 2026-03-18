@@ -372,6 +372,12 @@ describe('getAllRunIds', () => {
 
     const result = await getAllRunIds();
 
+    expect(mockQueryFields).toHaveBeenCalledWith([
+      'project_1_openRunIds',
+      'project_1_completedRunIds',
+      'project_2_openRunIds',
+      'project_2_completedRunIds',
+    ]);
     expect(result).toEqual([1, 2, 3, 4]);
   });
 });

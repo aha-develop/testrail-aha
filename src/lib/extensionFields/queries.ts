@@ -145,7 +145,6 @@ export const getProjectRecords: <
 
   if (kind === 'TestRun') {
     keys = projectIds.flatMap(projectId => [
-      indexKeyForKindAndParent('TestRun', projectId),
       indexKeyForKindAndParent('OpenRun', projectId),
       indexKeyForKindAndParent('CompletedRun', projectId),
     ]);
@@ -155,9 +154,7 @@ export const getProjectRecords: <
     );
   }
 
-  const ids = [
-    ...new Set((await getAccountExtensionFields<number[]>(keys)).flat()),
-  ];
+  const ids = (await getAccountExtensionFields<number[]>(keys)).flat();
 
   const records = await getRecords<T>(ids, kind);
 
@@ -253,14 +250,11 @@ export const getAllRunIds: () => Promise<number[]> = async () => {
   if (!projectIds || projectIds.length === 0) return [];
 
   const keys = projectIds.flatMap(projectId => [
-    indexKeyForKindAndParent('TestRun', projectId),
     indexKeyForKindAndParent('OpenRun', projectId),
     indexKeyForKindAndParent('CompletedRun', projectId),
   ]);
 
-  const runIds = (await getAccountExtensionFields<number[]>(keys)).flat();
-
-  return [...new Set(runIds)];
+  return (await getAccountExtensionFields<number[]>(keys)).flat();
 };
 
 export const getRunRowData: (
