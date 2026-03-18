@@ -199,12 +199,10 @@ describe('deleteIgnoredSuiteRecords', () => {
     const expectedIndexUpdates = {
       project_10_sectionIds: [102],
       project_10_caseIds: [302],
-      project_10_runIds: [502],
       project_10_openRunIds: [502],
       project_10_completedRunIds: [],
       project_20_sectionIds: [],
       project_20_caseIds: [],
-      project_20_runIds: [],
       project_20_openRunIds: [],
       project_20_completedRunIds: [],
     };

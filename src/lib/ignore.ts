@@ -42,7 +42,6 @@ export const deleteIgnoredSuiteRecords: (
 
     const sectionsToKeep = [];
     const testCasesToKeep = [];
-    const testRunsToKeep = [];
     const openRunsToKeep = [];
     const completedRunsToKeep = [];
     const deletedRuns = [];
@@ -68,7 +67,6 @@ export const deleteIgnoredSuiteRecords: (
         deletedRuns.push(testRun.id);
         recordsToDelete.push(fieldName('TestRun', testRun.id));
       } else {
-        testRunsToKeep.push(testRun.id);
         if (testRun.completed) {
           completedRunsToKeep.push(testRun.id);
         } else {
@@ -83,7 +81,6 @@ export const deleteIgnoredSuiteRecords: (
     if (projectTestCases.length > 0)
       indexesToUpdate[`project_${projectId}_caseIds`] = testCasesToKeep;
     if (projectTestRuns.length > 0) {
-      indexesToUpdate[`project_${projectId}_runIds`] = testRunsToKeep;
       indexesToUpdate[`project_${projectId}_openRunIds`] = openRunsToKeep;
       indexesToUpdate[`project_${projectId}_completedRunIds`] = completedRunsToKeep;
     }
