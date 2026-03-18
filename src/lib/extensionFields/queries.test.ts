@@ -115,7 +115,7 @@ describe('indexKeyForRecord', () => {
     ).toBe('project_2_caseIds');
   });
 
-  it('returns correct key for TestRun with project', () => {
+  it('returns correct key for open TestRun with project', () => {
     expect(
       indexKeyForRecord({
         kind: 'TestRun',
@@ -126,7 +126,21 @@ describe('indexKeyForRecord', () => {
         createdOn: 123,
         completed: false,
       })
-    ).toBe('project_2_runIds');
+    ).toBe('project_2_openRunIds');
+  });
+
+  it('returns correct key for completed TestRun with project', () => {
+    expect(
+      indexKeyForRecord({
+        kind: 'TestRun',
+        id: 1,
+        projectId: 2,
+        suiteId: 3,
+        name: 'Test Run',
+        createdOn: 123,
+        completed: true,
+      })
+    ).toBe('project_2_completedRunIds');
   });
 
   it('returns correct key for Test with run', () => {
@@ -169,6 +183,18 @@ describe('indexKeyForKindAndParent', () => {
 
   it('returns correct key for TestCase with project', () => {
     expect(indexKeyForKindAndParent('TestCase', 1)).toBe('project_1_caseIds');
+  });
+
+  it('returns correct key for OpenRun with project', () => {
+    expect(indexKeyForKindAndParent('OpenRun', 1)).toBe(
+      'project_1_openRunIds'
+    );
+  });
+
+  it('returns correct key for CompletedRun with project', () => {
+    expect(indexKeyForKindAndParent('CompletedRun', 1)).toBe(
+      'project_1_completedRunIds'
+    );
   });
 
   it('returns correct key for Test with run', () => {
