@@ -9,8 +9,8 @@ describe('normalizeSubdomain', () => {
     expect(normalizeSubdomain('http://myteam.testrail.io')).toBe('myteam');
   });
 
-  it('handles trailing slash', () => {
-    expect(normalizeSubdomain('https://myteam.testrail.io/')).toBe('myteam');
+  it('handles trailing characters', () => {
+    expect(normalizeSubdomain('https://myteam.testrail.io/index.php')).toBe('myteam');
   });
 
   it('strips .testrail.io without protocol', () => {
