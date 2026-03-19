@@ -3,7 +3,7 @@ import { ExtensionRecord } from './extensionRecord';
 import base64 from 'base64-js';
 
 export const normalizeDomain = (domain: string): string =>
-  domain.replace(/^https?:\/\//, '').replace(/\.testrail\.io\/?$/, '');
+  domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\.testrail\.io\/?$/, '');
 
 export type APIResult = {
   message?: string;

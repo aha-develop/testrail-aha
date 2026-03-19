@@ -20,4 +20,12 @@ describe('normalizeDomain', () => {
   it('returns plain subdomain unchanged', () => {
     expect(normalizeDomain('myteam')).toBe('myteam');
   });
+
+  it('trims whitespace', () => {
+    expect(normalizeDomain('  myteam  ')).toBe('myteam');
+  });
+
+  it('handles capitalization', () => {
+    expect(normalizeDomain('HTTPS://MYTEAM.TESTRAIL.IO')).toBe('myteam');
+  });
 });
