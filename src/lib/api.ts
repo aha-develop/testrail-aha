@@ -2,6 +2,9 @@ import { IDENTIFIER } from '../extension';
 import { ExtensionRecord } from './extensionRecord';
 import base64 from 'base64-js';
 
+export const normalizeSubdomain = (domain: string): string =>
+  domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\.testrail\.io.*/, '');
+
 export type APIResult = {
   message?: string;
   result?: any;
@@ -94,7 +97,7 @@ export const fetchTestRail: (props: FetchParams) => Promise<any> = async ({
   method = 'GET',
   body,
 }) => {
-  const url = `https://${domain}.testrail.io/index.php?/api/v2/${path}`;
+  const url = `https://${normalizeSubdomain(domain)}.testrail.io/index.php?/api/v2/${path}`;
 
   const headers = getHeaders();
 
