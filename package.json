@@ -112,9 +112,9 @@
       },
       "settings": {
         "domain": {
-          "title": "TestRail Domain",
+          "title": "TestRail Subdomain",
           "type": "string",
-          "description": "The domain of your TestRail instance",
+          "description": "The subdomain of your TestRail instance, e.g. enter 'myteam' if your TestRail instance is accessible at https://myteam.testrail.io/",
           "scope": [
             "account"
           ]
