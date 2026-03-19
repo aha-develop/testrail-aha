@@ -1,31 +1,31 @@
-import { normalizeDomain } from './api';
+import { normalizeSubdomain } from './api';
 
-describe('normalizeDomain', () => {
+describe('normalizeSubdomain', () => {
   it('strips https:// protocol and .testrail.io suffix', () => {
-    expect(normalizeDomain('https://myteam.testrail.io')).toBe('myteam');
+    expect(normalizeSubdomain('https://myteam.testrail.io')).toBe('myteam');
   });
 
   it('strips http:// protocol', () => {
-    expect(normalizeDomain('http://myteam.testrail.io')).toBe('myteam');
+    expect(normalizeSubdomain('http://myteam.testrail.io')).toBe('myteam');
   });
 
   it('handles trailing slash', () => {
-    expect(normalizeDomain('https://myteam.testrail.io/')).toBe('myteam');
+    expect(normalizeSubdomain('https://myteam.testrail.io/')).toBe('myteam');
   });
 
   it('strips .testrail.io without protocol', () => {
-    expect(normalizeDomain('myteam.testrail.io')).toBe('myteam');
+    expect(normalizeSubdomain('myteam.testrail.io')).toBe('myteam');
   });
 
   it('returns plain subdomain unchanged', () => {
-    expect(normalizeDomain('myteam')).toBe('myteam');
+    expect(normalizeSubdomain('myteam')).toBe('myteam');
   });
 
   it('trims whitespace', () => {
-    expect(normalizeDomain('  myteam  ')).toBe('myteam');
+    expect(normalizeSubdomain('  myteam  ')).toBe('myteam');
   });
 
   it('handles capitalization', () => {
-    expect(normalizeDomain('HTTPS://MYTEAM.TESTRAIL.IO')).toBe('myteam');
+    expect(normalizeSubdomain('HTTPS://MYTEAM.TESTRAIL.IO')).toBe('myteam');
   });
 });

@@ -1,6 +1,6 @@
 import React from 'react';
 import { TestRailRecord } from '../extension';
-import { normalizeDomain } from '../lib/api';
+import { normalizeSubdomain } from '../lib/api';
 
 type Props = {
   record: TestRailRecord;
@@ -15,15 +15,15 @@ const RecordLink: React.FC<Props> = ({ record, domain }) => {
 
   switch (record.kind) {
     case 'TestCase':
-      url = `https://${normalizeDomain(domain)}.testrail.io/index.php?/cases/view/${record.id}`;
+      url = `https://${normalizeSubdomain(domain)}.testrail.io/index.php?/cases/view/${record.id}`;
       prefix = 'C';
       break;
     case 'TestRun':
-      url = `https://${normalizeDomain(domain)}.testrail.io/index.php?/runs/view/${record.id}`;
+      url = `https://${normalizeSubdomain(domain)}.testrail.io/index.php?/runs/view/${record.id}`;
       prefix = 'R';
       break;
     case 'Test':
-      url = `https://${normalizeDomain(domain)}.testrail.io/index.php?/tests/view/${record.id}`;
+      url = `https://${normalizeSubdomain(domain)}.testrail.io/index.php?/tests/view/${record.id}`;
       prefix = 'T';
       break;
     default:
