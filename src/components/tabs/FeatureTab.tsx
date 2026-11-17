@@ -82,6 +82,9 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
 
   const [loading, setLoading] = useState(true);
   const [syncData, setSyncData] = useState<BulkSyncState>(null);
+  const isRefreshing =
+    syncData?.state === SyncState.Running ||
+    syncData?.state === SyncState.Timeout;
   const [tabData, setTabData] = useState<FeatureTabData>(null);
 
   const [linkRunModalOpen, setLinkRunModalOpen] = useState(false);
@@ -179,13 +182,6 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   return (
     <>
       <Styles />
-      {syncData && syncData.state === SyncState.Timeout && (
-        <div className='mb-5'>
-          <aha-alert type='danger' dismissable>
-            API rate limit reached. Please try again in a few minutes
-          </aha-alert>
-        </div>
-      )}
 
       <div className='tab-header'>
         <div className='tab-header-left'>
@@ -277,13 +273,11 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
                     reload: reloadTabData,
                   })
                 }
-                disabled={syncData.state === SyncState.Running ? true : null}
+                disabled={isRefreshing ? true : null}
                 size='mini'
                 kind='link'
               >
-                {syncData.state === SyncState.Running
-                  ? 'Refreshing'
-                  : 'Refresh'}
+                {isRefreshing ? 'Refreshing' : 'Refresh'}
               </aha-button>
             </>
           )}
