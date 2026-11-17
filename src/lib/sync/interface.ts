@@ -1,10 +1,10 @@
 import { IDENTIFIER } from '../../extension';
 
-import { TIMEOUT_MESSAGE, RETRY_WAIT, APIResult, PagedAPIResult } from '../api';
+import { TIMEOUT_MESSAGE, APIResult, PagedAPIResult } from '../api';
 import { sleep } from '../util';
 import { getAccountExtensionFieldMap } from '../extensionFields/queries';
 
-// The lambda can only run for up to 10 seconds, but can take some time to spin up on a cold start
+// The lambda can only run for up to 20 seconds, but can take some time to spin up on a cold start
 // and tends to take longer with more concurrency.
 const MAX_POLL_TIME = 5 * 60 * 1000;
 const INIT_WAIT_TIME = 3 * 1000;
@@ -58,6 +58,27 @@ type MaybeMappedResult =
   | { [key: string]: LambdaResult }
   | null;
 
+const callLambdaBatch = async ({
+  lambdaFunc,
+  eventKeys,
+  argsForKeys,
+}: IndexCallProps) => {
+  // The whole batch is retried together, so check once before dispatching it.
+  while (true) {
+    const { retryAt } = await getAccountExtensionFieldMap<number>(['retryAt']);
+    const delay = retryAt - Date.now();
+
+    if (!(delay > 0)) break;
+
+    await sleep(delay);
+    // Another request may have extended the account-wide cooldown while we waited.
+  }
+
+  for (const eventKey of eventKeys) {
+    await lambdaFunc({ ...argsForKeys[eventKey], eventKey });
+  }
+};
+
 const waitForResults: (
   eventKeys: string[],
   returnMap?: boolean
@@ -109,7 +130,6 @@ const waitForResults: (
     }
 
     if (timedOut) {
-      await sleep(RETRY_WAIT * 1000);
       return null;
     }
 
@@ -163,9 +183,10 @@ export const waitForLambda: <T extends LambdaResult>(
   await aha.account.clearExtensionField(IDENTIFIER, eventKey);
 
   while (!result) {
-    await lambdaFunc({
-      ...args,
-      eventKey,
+    await callLambdaBatch({
+      lambdaFunc,
+      eventKeys: [eventKey],
+      argsForKeys: { [eventKey]: args },
     });
 
     // No result means we timed out, so we have to re-call the lambda
@@ -214,23 +235,14 @@ export const waitForPagedLambda: <T>(
 
     eventKeys.push(pagedKey);
     argsForKeys[pagedKey] = lambdaArgs;
-    await lambdaFunc({
-      ...lambdaArgs,
-      eventKey: pagedKey,
-    });
-
     page++;
   }
 
+  await callLambdaBatch({ lambdaFunc, eventKeys, argsForKeys });
   let fetchResults = (await waitForResults(eventKeys)) as null | LambdaResult[];
 
   while (!fetchResults) {
-    for (const key of eventKeys) {
-      await lambdaFunc({
-        ...argsForKeys[key],
-        eventKey: key,
-      });
-    }
+    await callLambdaBatch({ lambdaFunc, eventKeys, argsForKeys });
 
     fetchResults = (await waitForResults(eventKeys)) as null | LambdaResult[];
   }
@@ -276,26 +288,17 @@ export const waitForPagedLambda: <T>(
 
       eventKeys.push(pagedKey);
       argsForKeys[pagedKey] = lambdaArgs;
-      await lambdaFunc({
-        ...lambdaArgs,
-        eventKey: pagedKey,
-      });
-
       page++;
     }
 
     // Circuit break in the event hasMore was set incorrectly
     if (eventKeys.length === 0) break;
 
+    await callLambdaBatch({ lambdaFunc, eventKeys, argsForKeys });
     fetchResults = (await waitForResults(eventKeys)) as null | LambdaResult[];
 
     while (!fetchResults) {
-      for (const key of eventKeys) {
-        await lambdaFunc({
-          ...argsForKeys[key],
-          eventKey: key,
-        });
-      }
+      await callLambdaBatch({ lambdaFunc, eventKeys, argsForKeys });
 
       fetchResults = (await waitForResults(eventKeys)) as null | LambdaResult[];
     }
@@ -385,10 +388,6 @@ export const waitForIndexedLambda: <T>(
 
         eventKeys.push(pagedKey);
         argsForKeys[pagedKey] = lambdaArgs;
-        await lambdaFunc({
-          ...lambdaArgs,
-          eventKey: pagedKey,
-        });
       }
     }
 
@@ -423,17 +422,13 @@ const makeIndexedCalls: <T>(
   const results: T[] = [];
   const finishedIds: string[] = [];
 
+  await callLambdaBatch({ lambdaFunc, eventKeys, argsForKeys });
   let fetchResults = (await waitForResults(eventKeys, true)) as null | {
     [key: string]: PagedAPIResult;
   };
 
   while (!fetchResults) {
-    for (const key of eventKeys) {
-      await lambdaFunc({
-        ...argsForKeys[key],
-        eventKey: key,
-      });
-    }
+    await callLambdaBatch({ lambdaFunc, eventKeys, argsForKeys });
 
     fetchResults = (await waitForResults(eventKeys, true)) as null | {
       [key: string]: PagedAPIResult;

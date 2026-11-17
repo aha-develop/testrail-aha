@@ -43,6 +43,8 @@ const createTestCase: (props: CreateProps) => Promise<void> = async ({
       method: 'POST',
     });
 
+    if (!json) return; // Preserve API errors so the coordinator can retry rate limits.
+
     const testCase: TestCase = {
       id: json.id,
       kind: 'TestCase',

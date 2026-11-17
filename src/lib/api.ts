@@ -3,7 +3,11 @@ import { ExtensionRecord } from './extensionRecord';
 import base64 from 'base64-js';
 
 export const normalizeSubdomain = (domain: string): string =>
-  domain.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\.testrail\.io.*/, '');
+  domain
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\.testrail\.io.*/, '');
 
 export type APIResult = {
   message?: string;
@@ -130,18 +134,21 @@ export const fetchTestRail: (props: FetchParams) => Promise<any> = async ({
 
       console.log('Storing API retry-at in Aha!');
 
-      aha.account.setExtensionField(
-        IDENTIFIER,
-        'retryAt',
-        Date.now() + retryAfterMs
-      );
+      // Run both together - we don't want a timeout by waiting for one before the other
+      await Promise.all([
+        aha.account.setExtensionField(
+          IDENTIFIER,
+          'retryAt',
+          Date.now() + retryAfterMs
+        ),
+        logResult({
+          record,
+          eventKey,
+          error: true,
+          message: TIMEOUT_MESSAGE,
+        }),
+      ]);
 
-      await logResult({
-        record,
-        eventKey,
-        error: true,
-        message: TIMEOUT_MESSAGE,
-      });
       return null;
     }
 
