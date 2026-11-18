@@ -82,9 +82,11 @@ export const saveNewRuns: (
   const keys = records.map(record => fieldName(record.kind, record.id));
   const map = await getAccountExtensionFieldMap<TestRun>(keys);
 
-  // Once a run is completed it no longer changes and can be ignored
+  // TestRail completion alone does not mean the later child sync succeeded.
+  // Missing markers (including records saved by older versions) must be retried.
   for (const record of records) {
-    if (map[fieldName(record.kind, record.id)]?.completed) continue;
+    const existing = map[fieldName(record.kind, record.id)];
+    if (existing?.completed && existing.childrenSynced) continue;
 
     newRecords.push(record);
   }
