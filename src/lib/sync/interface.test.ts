@@ -1,4 +1,4 @@
-import { TIMEOUT_MESSAGE } from '../api';
+import { TIMEOUT_MESSAGE, formatTimeoutMessage, fetchTestRail } from '../api';
 import { getAccountExtensionFieldMap } from '../extensionFields/queries';
 import {
   waitForLambda,
@@ -8,6 +8,11 @@ import {
 
 jest.mock('../extensionFields/queries', () => ({
   getAccountExtensionFieldMap: jest.fn(),
+}));
+
+jest.mock('base64-js', () => ({
+  __esModule: true,
+  default: jest.requireActual('base64-js'),
 }));
 
 const runners = [
@@ -118,7 +123,7 @@ describe('sync API cooldown', () => {
       const lambdaFunc = jest.fn(async ({ eventKey }) => {
         if (lambdaFunc.mock.calls.length === 1) {
           fields.retryAt = Date.now() + delay;
-          fields[eventKey] = { error: true, message: TIMEOUT_MESSAGE };
+          fields[eventKey] = { error: true, message: formatTimeoutMessage(fields.retryAt) };
         } else {
           fields[eventKey] = success;
         }
@@ -132,6 +137,132 @@ describe('sync API cooldown', () => {
       await jest.runAllTimersAsync();
       await pending;
     });
+
+    it.each([undefined, 999999])('honors the message deadline when shared retryAt is %s', async sharedRetryAt => {
+      fields.retryAt = sharedRetryAt;
+      const lambdaFunc = jest.fn(async ({ eventKey }) => {
+        fields[eventKey] = lambdaFunc.mock.calls.length === 1
+          ? { error: true, message: formatTimeoutMessage(1120000) }
+          : success;
+      });
+      const pending = run(lambdaFunc);
+
+      await jest.advanceTimersByTimeAsync(119999);
+      expect(lambdaFunc).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(lambdaFunc).toHaveBeenCalledTimes(2);
+      await jest.runAllTimersAsync();
+      await pending;
+    });
+
+    it('does not add a fallback wait when the embedded deadline has already passed', async () => {
+      const lambdaFunc = jest.fn(async ({ eventKey }) => {
+        fields[eventKey] = lambdaFunc.mock.calls.length === 1
+          ? { error: true, message: formatTimeoutMessage(1001000) }
+          : success;
+      });
+      const pending = run(lambdaFunc);
+
+      await jest.advanceTimersByTimeAsync(3000);
+      expect(lambdaFunc).toHaveBeenCalledTimes(2);
+      await jest.runAllTimersAsync();
+      await pending;
+    });
+
+    it.each([
+      TIMEOUT_MESSAGE,
+      'API limit reached. Please try again in a few minutes.',
+      `${TIMEOUT_MESSAGE} [retryAt=invalid]`,
+      `${TIMEOUT_MESSAGE} [retryAt=-1]`,
+      `${TIMEOUT_MESSAGE} [retryAt=99999999999999999999]`,
+    ])('waits 60 seconds from reading an unparseable timeout: %s', async message => {
+      const lambdaFunc = jest.fn(async ({ eventKey }) => {
+        fields[eventKey] = lambdaFunc.mock.calls.length === 1
+          ? { error: true, message }
+          : success;
+      });
+      const pending = run(lambdaFunc);
+
+      // The first result is read at 3 seconds. The fallback is fixed at 63
+      // seconds and must not move forward each time the cooldown is checked.
+      await jest.advanceTimersByTimeAsync(62999);
+      expect(lambdaFunc).toHaveBeenCalledTimes(1);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(lambdaFunc).toHaveBeenCalledTimes(2);
+      await jest.runAllTimersAsync();
+      await pending;
+    });
+  });
+
+  it('waits for the embedded deadline when a bulk-written result is visible before retryAt', async () => {
+    const originalFetch = global.fetch;
+    const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const serverJobs: Promise<any>[] = [];
+    const requestTimes: number[] = [];
+    (aha as any).settings = { get: () => 'test' };
+    aha.account.setExtensionFields = jest.fn(async (_identifier, values) => {
+      fields.sync = values.sync;
+      // Bulk transport need not guarantee that both fields become readable
+      // together. Model the original result-first race explicitly.
+      await new Promise(resolve => setTimeout(resolve, 10000));
+      fields.retryAt = values.retryAt;
+    });
+    global.fetch = jest.fn(async () => {
+      requestTimes.push(Date.now());
+      return requestTimes.length === 1
+        ? { ok: false, status: 429, headers: { get: () => '120' } }
+        : { ok: true, json: async () => ({ id: 1 }) };
+    }) as any;
+    const lambdaFunc = async ({ eventKey }) => {
+      // Dispatch acknowledgement does not wait for the server handler.
+      serverJobs.push(fetchTestRail({
+        path: 'get_projects', eventKey, record: aha.account,
+      }).then(result => {
+        if (result) fields[eventKey] = success;
+      }));
+    };
+
+    try {
+      const pending = runners[0].run(lambdaFunc);
+      await jest.advanceTimersByTimeAsync(3000);
+      expect(fields.retryAt).toBeUndefined();
+      expect(requestTimes).toEqual([1000000]);
+      await jest.advanceTimersByTimeAsync(116999);
+      expect(requestTimes).toEqual([1000000]);
+      await jest.advanceTimersByTimeAsync(1);
+      expect(requestTimes).toEqual([1000000, 1120000]);
+      await jest.runAllTimersAsync();
+      expect(await pending).toEqual(success);
+      await Promise.all(serverJobs);
+      expect(aha.account.setExtensionFields).toHaveBeenCalledTimes(1);
+    } finally {
+      global.fetch = originalFetch;
+      log.mockRestore();
+      error.mockRestore();
+    }
+  });
+
+  it('uses the longest result deadline and rechecks extensions to the shared deadline', async () => {
+    const lambdaFunc = jest.fn(async ({ eventKey, parentId }) => {
+      fields[eventKey] = lambdaFunc.mock.calls.length <= 2
+        ? { error: true, message: formatTimeoutMessage(1000000 + (parentId ? 30000 : 15000)) }
+        : success;
+    });
+    const pending = waitForIndexedLambda({
+      eventKey: 'sync', args: {}, lambdaFunc, numIds: 2,
+      argFunc: index => ({ parentId: index }),
+    });
+
+    await jest.advanceTimersByTimeAsync(20000);
+    expect(lambdaFunc).toHaveBeenCalledTimes(2);
+    fields.retryAt = 1120000;
+    await jest.advanceTimersByTimeAsync(99999);
+    expect(lambdaFunc).toHaveBeenCalledTimes(2);
+    await jest.advanceTimersByTimeAsync(1);
+    expect(lambdaFunc).toHaveBeenCalledTimes(4);
+    await jest.runAllTimersAsync();
+    expect(await pending).toEqual(['record', 'record']);
   });
 
   it('rechecks the deadline after sleeping in case another request extended it', async () => {
@@ -199,7 +330,7 @@ describe('sync API cooldown', () => {
       const lambdaFunc = jest.fn(async args => {
         if ([firstBatchSize + 1, firstBatchSize + 3].includes(lambdaFunc.mock.calls.length)) {
           fields.retryAt = Date.now() + 120000;
-          fields[args.eventKey] = { error: true, message: TIMEOUT_MESSAGE };
+          fields[args.eventKey] = { error: true, message: formatTimeoutMessage(fields.retryAt) };
         } else {
           fields[args.eventKey] = batchResult(args);
         }
@@ -229,7 +360,7 @@ describe('sync API cooldown', () => {
         if ((id === firstBatchSize && attempt === 1) ||
             (id === firstBatchSize + 2 && attempt <= 2)) {
           fields.retryAt = Date.now() + 15000;
-          fields[args.eventKey] = { error: true, message: TIMEOUT_MESSAGE };
+          fields[args.eventKey] = { error: true, message: formatTimeoutMessage(fields.retryAt) };
         } else {
           fields[args.eventKey] = batchResult(args);
         }
@@ -254,7 +385,7 @@ describe('sync API cooldown', () => {
         const call = lambdaFunc.mock.calls.length;
         if (call === firstBatchSize + 1) {
           fields.retryAt = Date.now() + 5000;
-          fields[args.eventKey] = { error: true, message: TIMEOUT_MESSAGE };
+          fields[args.eventKey] = { error: true, message: formatTimeoutMessage(fields.retryAt) };
         } else if (call === firstBatchSize + 2) {
           lateKey = args.eventKey;
           setTimeout(() => { fields[lateKey] = batchResult(args); }, 15000);
@@ -284,7 +415,7 @@ describe('sync API cooldown', () => {
         const call = lambdaFunc.mock.calls.length;
         if (call === firstBatchSize + 1) {
           fields.retryAt = Date.now() + 120000;
-          fields[args.eventKey] = { error: true, message: TIMEOUT_MESSAGE };
+          fields[args.eventKey] = { error: true, message: formatTimeoutMessage(fields.retryAt) };
         } else if (call === firstBatchSize + 2) {
           fields[args.eventKey] = { error: true, message: 'Invalid credentials' };
         } else {
@@ -307,7 +438,7 @@ describe('sync API cooldown', () => {
       if (page === 2 && !retried) {
         retried = true;
         fields.retryAt = Date.now() + 15000;
-        fields[eventKey] = { error: true, message: TIMEOUT_MESSAGE };
+        fields[eventKey] = { error: true, message: formatTimeoutMessage(fields.retryAt) };
       } else {
         // Return the final page first, so neither response order nor retry order
         // can be used to decide which page's hasMore flag governs the next batch.
@@ -329,7 +460,7 @@ describe('sync API cooldown', () => {
     const lambdaFunc = jest.fn(async ({ eventKey, parentId }) => {
       if (parentId === 0) {
         fields.retryAt = Date.now() + 15000;
-        fields[eventKey] = { error: true, message: TIMEOUT_MESSAGE };
+        fields[eventKey] = { error: true, message: formatTimeoutMessage(fields.retryAt) };
       }
       // Parent 1 never reports a result.
     });
@@ -349,7 +480,7 @@ describe('sync API cooldown', () => {
     const lambdaFunc = jest.fn(async ({ eventKey }) => {
       if (lambdaFunc.mock.calls.length === 1) {
         fields.retryAt = Date.now() + 600000;
-        fields[eventKey] = { error: true, message: TIMEOUT_MESSAGE };
+        fields[eventKey] = { error: true, message: formatTimeoutMessage(fields.retryAt) };
       } else {
         fields[eventKey] = success;
       }
@@ -365,7 +496,7 @@ describe('sync API cooldown', () => {
     const lambdaFunc = jest.fn(async ({ eventKey }) => {
       if (lambdaFunc.mock.calls.length <= 3) {
         fields.retryAt = Date.now() + 15000;
-        fields[eventKey] = { error: true, message: TIMEOUT_MESSAGE };
+        fields[eventKey] = { error: true, message: formatTimeoutMessage(fields.retryAt) };
       } else {
         fields[eventKey] = success;
       }
@@ -390,7 +521,7 @@ describe('sync API cooldown', () => {
         fields[eventKey] = { error: true, message: 'Invalid credentials' };
       } else if (parentId === 1) {
         fields.retryAt = Date.now() + 15000;
-        fields[eventKey] = { error: true, message: TIMEOUT_MESSAGE };
+        fields[eventKey] = { error: true, message: formatTimeoutMessage(fields.retryAt) };
       } else {
         fields[eventKey] = success;
       }

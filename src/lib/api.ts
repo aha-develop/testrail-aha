@@ -49,6 +49,27 @@ type FetchParams = BaseParams & {
 export const RETRY_WAIT = 60;
 export const TIMEOUT_MESSAGE =
   'API limit reached. Will retry after the specified time.';
+// Recognize older timeout wording too, even when no usable deadline is present.
+const TIMEOUT_REGEX = /^API limit reached\.[^\r\n]*?(?: \[retryAt=(\d+)\])?$/;
+
+export const formatTimeoutMessage = (retryAt: number): string =>
+  `${TIMEOUT_MESSAGE} [retryAt=${retryAt}]`;
+
+export const isTimeoutMessage = (message?: string): boolean =>
+  TIMEOUT_REGEX.test(message ?? '');
+
+export const getTimeoutRetryAt = (message?: string): number => {
+  const retryAt = Number(TIMEOUT_REGEX.exec(message ?? '')?.[1]);
+  if (
+    Number.isSafeInteger(retryAt) &&
+    retryAt >= 0 &&
+    !Number.isNaN(new Date(retryAt).getTime())
+  ) {
+    return retryAt;
+  }
+
+  return Date.now() + RETRY_WAIT * 1000;
+};
 
 export const logResult: (props: LogProps) => void = async ({
   message,
@@ -146,26 +167,35 @@ export const fetchTestRail: (props: FetchParams) => Promise<any> = async ({
 
   if (!response.ok) {
     if (response.status === 429) {
-      const retryAfter = response.headers.get('Retry-After');
+      const retryAfter = parseInt(response.headers.get('Retry-After') ?? '');
       const retryAfterMs =
-        (retryAfter ? parseInt(retryAfter) : RETRY_WAIT) * 1000;
+        (Number.isFinite(retryAfter) && retryAfter >= 0
+          ? retryAfter
+          : RETRY_WAIT) * 1000;
+      const retryAt = Date.now() + retryAfterMs;
+      const timeoutResult: APIResult = {
+        error: true,
+        message: formatTimeoutMessage(retryAt),
+      };
 
+      const retryTime = new Date(retryAt).toISOString().slice(11, 19);
+      console.error(`API limit reached. Will retry after ${retryTime} UTC`);
       console.log('Storing API retry-at in Aha!');
 
-      // Run both together - we don't want a timeout by waiting for one before the other
-      await Promise.all([
-        aha.account.setExtensionField(
-          IDENTIFIER,
-          'retryAt',
-          Date.now() + retryAfterMs
-        ),
-        logResult({
-          record,
-          eventKey,
-          error: true,
-          message: TIMEOUT_MESSAGE,
-        }),
-      ]);
+      if (!eventKey || record === aha.account) {
+        // Send both fields in one request. The result carries its own deadline
+        // so readers do not depend on the fields becoming visible together.
+        await aha.account.setExtensionFields(IDENTIFIER, {
+          retryAt,
+          ...(eventKey ? { [eventKey]: timeoutResult } : {}),
+        });
+      } else {
+        // Results for other records cannot share the account's bulk write.
+        await Promise.all([
+          aha.account.setExtensionField(IDENTIFIER, 'retryAt', retryAt),
+          record.setExtensionField(IDENTIFIER, eventKey, timeoutResult),
+        ]);
+      }
 
       return null;
     }

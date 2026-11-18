@@ -1,6 +1,11 @@
 import { IDENTIFIER } from '../../extension';
 
-import { TIMEOUT_MESSAGE, APIResult, PagedAPIResult } from '../api';
+import {
+  isTimeoutMessage,
+  getTimeoutRetryAt,
+  APIResult,
+  PagedAPIResult,
+} from '../api';
 import { sleep } from '../util';
 import { getAccountExtensionFieldMap } from '../extensionFields/queries';
 
@@ -56,17 +61,18 @@ type PagedWaitProps = WaitProps & {
 type LambdaResultMap = { [key: string]: LambdaResult };
 
 const isRateLimited = (result: LambdaResult) =>
-  result.error === true && result.message === TIMEOUT_MESSAGE;
+  result.error === true && isTimeoutMessage(result.message);
 
 const callLambdaBatch = async ({
   lambdaFunc,
   eventKeys,
   argsForKeys,
-}: IndexCallProps) => {
+  minimumRetryAt = 0,
+}: IndexCallProps & { minimumRetryAt?: number }) => {
   // Check once for the group being dispatched, including any selective retries.
   while (true) {
     const { retryAt } = await getAccountExtensionFieldMap<number>(['retryAt']);
-    const delay = retryAt - Date.now();
+    const delay = Math.max(minimumRetryAt, retryAt || 0) - Date.now();
 
     if (!(delay > 0)) break;
 
@@ -133,9 +139,15 @@ const executeLambdaBatch = async ({
 }: IndexCallProps): Promise<LambdaResultMap> => {
   const results: LambdaResultMap = {};
   let pendingKeys = eventKeys;
+  let minimumRetryAt = 0;
 
   while (pendingKeys.length) {
-    await callLambdaBatch({ eventKeys: pendingKeys, lambdaFunc, argsForKeys });
+    await callLambdaBatch({
+      eventKeys: pendingKeys,
+      lambdaFunc,
+      argsForKeys,
+      minimumRetryAt,
+    });
     const attempt = await waitForResults(pendingKeys);
     Object.assign(results, attempt);
 
@@ -147,6 +159,12 @@ const executeLambdaBatch = async ({
 
     // Keep successes from every attempt; only rate-limited requests are resent.
     pendingKeys = pendingKeys.filter(key => isRateLimited(attempt[key]));
+    // Resolve fallback deadlines once per attempt, not on every cooldown poll.
+    minimumRetryAt = pendingKeys.reduce(
+      (deadline, key) =>
+        Math.max(deadline, getTimeoutRetryAt(attempt[key].message)),
+      0
+    );
   }
 
   return results;

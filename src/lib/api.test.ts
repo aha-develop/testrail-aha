@@ -1,4 +1,4 @@
-import { fetchTestRail, normalizeSubdomain, TIMEOUT_MESSAGE } from './api';
+import { fetchTestRail, normalizeSubdomain, formatTimeoutMessage } from './api';
 import { IDENTIFIER } from '../extension';
 
 // Match the default-import interop supplied by the extension bundler.
@@ -141,6 +141,7 @@ describe('fetchTestRail cooldown', () => {
   const mockFetch = jest.fn();
   const getExtensionField = jest.fn();
   const setExtensionField = jest.fn();
+  const setExtensionFields = jest.fn();
   const originalFetch = global.fetch;
 
   beforeEach(() => {
@@ -151,7 +152,7 @@ describe('fetchTestRail cooldown', () => {
     global.fetch = mockFetch;
     (global as any).aha = {
       settings: { get: () => 'test' },
-      account: { getExtensionField, setExtensionField },
+      account: { getExtensionField, setExtensionField, setExtensionFields },
     };
   });
 
@@ -174,13 +175,13 @@ describe('fetchTestRail cooldown', () => {
     expect(getExtensionField).not.toHaveBeenCalled();
   });
 
-  it.each(['120', null])('saves the deadline and 429 result concurrently and awaits both (Retry-After=%s)', async retryAfter => {
+  it.each(['120', null, 'invalid'])('saves the deadline and 429 result in one awaited request (Retry-After=%s)', async retryAfter => {
     mockFetch.mockResolvedValue({
       ok: false, status: 429, headers: { get: () => retryAfter },
     });
-    const finishSaving: { [key: string]: () => void } = {};
-    setExtensionField.mockImplementation(async (_identifier, key) => {
-      await new Promise<void>(resolve => { finishSaving[key] = resolve; });
+    let finishSaving: () => void;
+    setExtensionFields.mockImplementation(async () => {
+      await new Promise<void>(resolve => { finishSaving = resolve; });
     });
     let completed = false;
     const pending = request().then(result => {
@@ -189,19 +190,58 @@ describe('fetchTestRail cooldown', () => {
     });
     await jest.advanceTimersByTimeAsync(0);
 
-    expect(setExtensionField).toHaveBeenCalledTimes(2);
-    expect(setExtensionField).toHaveBeenCalledWith(
-      IDENTIFIER, 'retryAt', 1000000 + (retryAfter ? 120000 : 60000)
+    const retryAt = 1000000 + (retryAfter === '120' ? 120000 : 60000);
+    expect(setExtensionFields).toHaveBeenCalledTimes(1);
+    expect(setExtensionFields).toHaveBeenCalledWith(IDENTIFIER, {
+      retryAt,
+      sync: { error: true, message: formatTimeoutMessage(retryAt) },
+    });
+    expect(setExtensionField).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledWith(
+      `API limit reached. Will retry after ${retryAfter === '120' ? '00:18:40' : '00:17:40'} UTC`
     );
-    expect(setExtensionField).toHaveBeenLastCalledWith(IDENTIFIER, 'sync', {
-      error: true, message: TIMEOUT_MESSAGE, result: undefined,
+    expect(completed).toBe(false);
+    finishSaving();
+    expect(await pending).toBeNull();
+  });
+
+  it('saves the cooldown without an event result when no event key is supplied', async () => {
+    mockFetch.mockResolvedValue({
+      ok: false, status: 429, headers: { get: () => '60' },
     });
 
-    // Exercise both completion orders: neither write can be left in flight.
-    finishSaving[retryAfter ? 'sync' : 'retryAt']();
+    await fetchTestRail({ path: 'get_projects', record: aha.account });
+
+    expect(setExtensionFields).toHaveBeenCalledWith(IDENTIFIER, { retryAt: 1060000 });
+    expect(setExtensionField).not.toHaveBeenCalled();
+  });
+
+  it.each(['account', 'record'])('starts both writes concurrently for a different result record (%s finishes first)', async first => {
+    mockFetch.mockResolvedValue({
+      ok: false, status: 429, headers: { get: () => '120' },
+    });
+    const finish: { [key: string]: () => void } = {};
+    setExtensionField.mockImplementation(() => new Promise<void>(resolve => {
+      finish.account = resolve;
+    }));
+    const record = { setExtensionField: jest.fn(() => new Promise<void>(resolve => {
+      finish.record = resolve;
+    })) };
+    let completed = false;
+    const pending = fetchTestRail({
+      path: 'get_projects', record: record as any, eventKey: 'sync',
+    }).then(result => { completed = true; return result; });
+    await jest.advanceTimersByTimeAsync(0);
+
+    expect(setExtensionField).toHaveBeenCalledWith(IDENTIFIER, 'retryAt', 1120000);
+    expect(record.setExtensionField).toHaveBeenCalledWith(IDENTIFIER, 'sync', {
+      error: true, message: formatTimeoutMessage(1120000),
+    });
+    expect(setExtensionFields).not.toHaveBeenCalled();
+    finish[first]();
     await jest.advanceTimersByTimeAsync(0);
     expect(completed).toBe(false);
-    finishSaving[retryAfter ? 'retryAt' : 'sync']();
+    finish[first === 'account' ? 'record' : 'account']();
     expect(await pending).toBeNull();
   });
 });
