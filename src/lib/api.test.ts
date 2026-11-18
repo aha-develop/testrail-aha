@@ -74,25 +74,34 @@ describe('fetchTestRail cooldown', () => {
     expect(getExtensionField).not.toHaveBeenCalled();
   });
 
-  it.each(['120', null])('persists the deadline before reporting a 429 (Retry-After=%s)', async retryAfter => {
+  it.each(['120', null])('saves the deadline and 429 result concurrently and awaits both (Retry-After=%s)', async retryAfter => {
     mockFetch.mockResolvedValue({
       ok: false, status: 429, headers: { get: () => retryAfter },
     });
-    let finishSaving: () => void;
+    const finishSaving: { [key: string]: () => void } = {};
     setExtensionField.mockImplementation(async (_identifier, key) => {
-      if (key === 'retryAt') await new Promise<void>(resolve => { finishSaving = resolve; });
+      await new Promise<void>(resolve => { finishSaving[key] = resolve; });
     });
-    const pending = request();
+    let completed = false;
+    const pending = request().then(result => {
+      completed = true;
+      return result;
+    });
     await jest.advanceTimersByTimeAsync(0);
 
-    expect(setExtensionField).toHaveBeenCalledTimes(1);
+    expect(setExtensionField).toHaveBeenCalledTimes(2);
     expect(setExtensionField).toHaveBeenCalledWith(
       IDENTIFIER, 'retryAt', 1000000 + (retryAfter ? 120000 : 60000)
     );
-    finishSaving();
-    expect(await pending).toBeNull();
     expect(setExtensionField).toHaveBeenLastCalledWith(IDENTIFIER, 'sync', {
       error: true, message: TIMEOUT_MESSAGE, result: undefined,
     });
+
+    // Exercise both completion orders: neither write can be left in flight.
+    finishSaving[retryAfter ? 'sync' : 'retryAt']();
+    await jest.advanceTimersByTimeAsync(0);
+    expect(completed).toBe(false);
+    finishSaving[retryAfter ? 'retryAt' : 'sync']();
+    expect(await pending).toBeNull();
   });
 });

@@ -53,17 +53,17 @@ type PagedWaitProps = WaitProps & {
   ids?: number[];
 };
 
-type MaybeMappedResult =
-  | LambdaResult[]
-  | { [key: string]: LambdaResult }
-  | null;
+type LambdaResultMap = { [key: string]: LambdaResult };
+
+const isRateLimited = (result: LambdaResult) =>
+  result.error === true && result.message === TIMEOUT_MESSAGE;
 
 const callLambdaBatch = async ({
   lambdaFunc,
   eventKeys,
   argsForKeys,
 }: IndexCallProps) => {
-  // The whole batch is retried together, so check once before dispatching it.
+  // Check once for the group being dispatched, including any selective retries.
   while (true) {
     const { retryAt } = await getAccountExtensionFieldMap<number>(['retryAt']);
     const delay = retryAt - Date.now();
@@ -79,97 +79,80 @@ const callLambdaBatch = async ({
   }
 };
 
-const waitForResults: (
-  eventKeys: string[],
-  returnMap?: boolean
-) => Promise<MaybeMappedResult> = async (eventKeys, returnMap) => {
+const waitForResults = async (eventKeys: string[]): Promise<LambdaResultMap> => {
   const initialTime = Date.now();
-
+  const results: LambdaResultMap = {};
   let error: string | null = null;
-  let timedOut = false;
 
   // Wait a little longer before first poll as the lambda has to spin up
   await sleep(INIT_WAIT_TIME);
 
   while (Date.now() - initialTime < MAX_POLL_TIME) {
-    const results = await getAccountExtensionFieldMap<LambdaResult>(eventKeys);
+    const pendingKeys = eventKeys.filter(key => !results[key]);
+    const fetched = await getAccountExtensionFieldMap<LambdaResult>(pendingKeys);
 
-    for (const eventKey in results) {
-      const result = results[eventKey];
-
+    for (const eventKey of pendingKeys) {
+      const result = fetched[eventKey];
       if (result?.message) {
-        if (result.error && result.message === TIMEOUT_MESSAGE) {
-          timedOut = true;
-        } else if (result.error) {
+        results[eventKey] = result;
+        if (result.error && !isRateLimited(result)) {
           error = result.message;
           break;
         }
       }
     }
 
-    // Any error, including timeout, invalidates the whole batch
-    if (error || timedOut) {
-      for (const key of eventKeys) {
-        await aha.account.clearExtensionField(IDENTIFIER, key);
-      }
-    }
-
-    if (error) {
-      const errors = eventKeys.reduce((acc, key) => {
-        acc[key] = {
-          error: true,
-          message: error,
-        };
-
-        return acc;
-      }, {});
-
-      if (returnMap) return errors;
-
-      return Object.values(errors);
-    }
-
-    if (timedOut) {
-      return null;
-    }
-
-    const arrayResults = Object.values(results);
-
-    if (
-      arrayResults.length === eventKeys.length &&
-      arrayResults.every(result => result?.message)
-    ) {
-      for (const key of eventKeys) {
-        await aha.account.clearExtensionField(IDENTIFIER, key);
-      }
-
-      if (returnMap) return results;
-
-      return arrayResults;
-    }
+    // A 429 is a completed attempt. Wait for the other requests before retrying
+    // so missing results are never mistaken for requests that need resubmitting.
+    if (error || eventKeys.every(key => results[key])) break;
 
     await sleep(INTERVAL_TIME);
   }
 
-  const errors = eventKeys.reduce((acc, key) => {
-    acc[key] = {
-      error: true,
-      message: 'Timeout waiting for lambda to complete - please try again',
-    };
-
-    return acc;
-  }, {});
+  if (!error && eventKeys.some(key => !results[key])) {
+    error = 'Timeout waiting for lambda to complete - please try again';
+  }
 
   for (const key of eventKeys) {
     await aha.account.clearExtensionField(IDENTIFIER, key);
   }
 
-  if (returnMap) return errors;
+  if (error) {
+    return Object.fromEntries(
+      eventKeys.map(key => [key, { error: true, message: error }])
+    );
+  }
 
-  return Object.values(errors);
+  return results;
 };
 
-// Returns a promise that either resolves or raises an error with the error message from the API
+const executeLambdaBatch = async ({
+  eventKeys,
+  lambdaFunc,
+  argsForKeys,
+}: IndexCallProps): Promise<LambdaResultMap> => {
+  const results: LambdaResultMap = {};
+  let pendingKeys = eventKeys;
+
+  while (pendingKeys.length) {
+    await callLambdaBatch({ eventKeys: pendingKeys, lambdaFunc, argsForKeys });
+    const attempt = await waitForResults(pendingKeys);
+    Object.assign(results, attempt);
+
+    if (
+      Object.values(attempt).some(result => result.error && !isRateLimited(result))
+    ) {
+      return results;
+    }
+
+    // Keep successes from every attempt; only rate-limited requests are resent.
+    pendingKeys = pendingKeys.filter(key => isRateLimited(attempt[key]));
+  }
+
+  return results;
+};
+
+// Returns the API result, automatically retrying rate-limited attempts.
 export const waitForLambda: <T extends LambdaResult>(
   props: WaitProps
 ) => Promise<T> = async <T extends LambdaResult>({
@@ -177,23 +160,16 @@ export const waitForLambda: <T extends LambdaResult>(
   lambdaFunc,
   args,
 }) => {
-  let result: T[] | null = null;
-
   // Possible in the case of a failed cleanup
   await aha.account.clearExtensionField(IDENTIFIER, eventKey);
 
-  while (!result) {
-    await callLambdaBatch({
-      lambdaFunc,
-      eventKeys: [eventKey],
-      argsForKeys: { [eventKey]: args },
-    });
+  const results = await executeLambdaBatch({
+    lambdaFunc,
+    eventKeys: [eventKey],
+    argsForKeys: { [eventKey]: args },
+  });
 
-    // No result means we timed out, so we have to re-call the lambda
-    result = (await waitForResults([eventKey])) as T[];
-  }
-
-  return result[0];
+  return results[eventKey] as T;
 };
 
 // As above, but makes multiple calls to the lambda to fetch pages until there
@@ -238,17 +214,17 @@ export const waitForPagedLambda: <T>(
     page++;
   }
 
-  await callLambdaBatch({ lambdaFunc, eventKeys, argsForKeys });
-  let fetchResults = (await waitForResults(eventKeys)) as null | LambdaResult[];
-
-  while (!fetchResults) {
-    await callLambdaBatch({ lambdaFunc, eventKeys, argsForKeys });
-
-    fetchResults = (await waitForResults(eventKeys)) as null | LambdaResult[];
-  }
+  let batchResults = await executeLambdaBatch({
+    lambdaFunc,
+    eventKeys,
+    argsForKeys,
+  });
+  // Page order must be preserved even when earlier pages complete on a retry.
+  let fetchResults = eventKeys.map(key => batchResults[key]);
 
   argsForKeys = {}; // Reset for next batch
   let error = fetchResults.find(result => result.error)?.message;
+  if (error) throw new Error(error);
   let hasMore = true;
 
   if (isPaginated && usePage) {
@@ -294,14 +270,8 @@ export const waitForPagedLambda: <T>(
     // Circuit break in the event hasMore was set incorrectly
     if (eventKeys.length === 0) break;
 
-    await callLambdaBatch({ lambdaFunc, eventKeys, argsForKeys });
-    fetchResults = (await waitForResults(eventKeys)) as null | LambdaResult[];
-
-    while (!fetchResults) {
-      await callLambdaBatch({ lambdaFunc, eventKeys, argsForKeys });
-
-      fetchResults = (await waitForResults(eventKeys)) as null | LambdaResult[];
-    }
+    batchResults = await executeLambdaBatch({ lambdaFunc, eventKeys, argsForKeys });
+    fetchResults = eventKeys.map(key => batchResults[key]);
 
     argsForKeys = {};
 
@@ -422,18 +392,13 @@ const makeIndexedCalls: <T>(
   const results: T[] = [];
   const finishedIds: string[] = [];
 
-  await callLambdaBatch({ lambdaFunc, eventKeys, argsForKeys });
-  let fetchResults = (await waitForResults(eventKeys, true)) as null | {
+  const fetchResults = (await executeLambdaBatch({
+    lambdaFunc,
+    eventKeys,
+    argsForKeys,
+  })) as {
     [key: string]: PagedAPIResult;
   };
-
-  while (!fetchResults) {
-    await callLambdaBatch({ lambdaFunc, eventKeys, argsForKeys });
-
-    fetchResults = (await waitForResults(eventKeys, true)) as null | {
-      [key: string]: PagedAPIResult;
-    };
-  }
 
   const error = Object.values(fetchResults).find(
     result => result.error
@@ -441,7 +406,7 @@ const makeIndexedCalls: <T>(
 
   if (error) throw new Error(error);
 
-  for (const key in fetchResults) {
+  for (const key of eventKeys) {
     const result = fetchResults[key];
 
     results.push(...(result.result?.result ?? []));
