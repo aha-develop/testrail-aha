@@ -36,6 +36,7 @@ describe('completed run recovery', () => {
   let fields: { [key: string]: any };
   let standaloneRuns: TestRun[];
   let planRuns: TestRun[];
+  let openPlanRuns: TestRun[];
   let openRuns: TestRun[];
   let failure: Failure;
   let testRequests: number[];
@@ -60,6 +61,7 @@ describe('completed run recovery', () => {
     };
     standaloneRuns = [];
     planRuns = [];
+    openPlanRuns = [];
     openRuns = [];
     failure = undefined;
     testRequests = [];
@@ -90,14 +92,14 @@ describe('completed run recovery', () => {
       names.filter(name => fields[name] !== undefined)
         .map(name => ({ name, value: copy(fields[name]) }))
     );
-    (waitForPagedLambda as jest.Mock).mockImplementation(async ({ eventKey }) => {
+    (waitForPagedLambda as jest.Mock).mockImplementation(async ({ eventKey, ids }) => {
       if (eventKey.startsWith('syncCompletedRuns-')) return copy(standaloneRuns);
       if (eventKey.startsWith('syncCompletedPlans-')) return planRuns.length ? [100] : [];
-      if (eventKey.startsWith('syncPlanRuns-')) return copy(planRuns);
+      if (eventKey.startsWith('syncPlanRuns-')) return copy(ids[0] === 200 ? openPlanRuns : planRuns);
       throw new Error(`Unexpected request: ${eventKey}`);
     });
     (waitForIndexedLambda as jest.Mock).mockImplementation(async props => {
-      if (props.eventKey.startsWith('syncPlans-')) return [];
+      if (props.eventKey.startsWith('syncPlans-')) return openPlanRuns.length ? [200] : [];
       if (props.args.isCompleted === 0) return copy(openRuns);
       const ids = Array.from({ length: props.numIds }, (_, i) => props.argFunc(i).runId);
       if (props.eventKey.startsWith('syncTests-')) {
@@ -125,12 +127,13 @@ describe('completed run recovery', () => {
     jest.restoreAllMocks();
   });
 
-  describe.each(['standalone', 'plan'])('%s runs', origin => {
+  describe.each(['standalone', 'plan', 'open plan'])('%s runs', origin => {
     it.each<Failure>([
       'before-tests', 'test-fetch', 'test-write', 'test-index',
       'result-fetch', 'result-write', 'marker-write',
     ])('retries after %s fails and skips only after successful recovery', async point => {
       if (origin === 'standalone') standaloneRuns = [completedRun];
+      else if (origin === 'open plan') openPlanRuns = [completedRun];
       else planRuns = [completedRun];
       const type = origin === 'standalone' ? SyncType.All : SyncType.Tests;
       failure = point;
@@ -160,6 +163,44 @@ describe('completed run recovery', () => {
       expect(testRequests).toEqual([]);
       expect(resultRequests).toEqual([]);
     });
+  });
+
+  it.each([SyncType.All, SyncType.Tests])('skips synced completed children of open plans across syncs (type=%s)', async type => {
+    const syncedRun = { ...completedRun, childrenSynced: true };
+    const openRun = { ...completedRun, id: 20, completed: false };
+    const legacyRun = { ...completedRun, id: 30 };
+    const unfinishedRun = { ...completedRun, id: 40 };
+    fields.run_10 = copy(syncedRun);
+    fields.run_30 = copy(legacyRun);
+    fields.run_40 = { ...unfinishedRun, childrenSynced: false };
+    openPlanRuns = [completedRun, openRun, legacyRun, unfinishedRun];
+
+    await sync(true, type);
+
+    expect(testRequests).toEqual([20, 30, 40]);
+    expect(resultRequests).toEqual([
+      { runId: 20, createdAfter: watermark / 1000 },
+      { runId: 30, createdAfter: undefined },
+      { runId: 40, createdAfter: undefined },
+    ]);
+    expect(fields.run_10).toEqual(syncedRun);
+    expect(fields.run_30.childrenSynced).toBe(true);
+    expect(fields.run_40.childrenSynced).toBe(true);
+    expect(fields[getSyncKey(type)].state).toBe(SyncState.Complete);
+
+    const lastSync = fields[getSyncKey(type)].lastSync;
+    testRequests = [];
+    resultRequests = [];
+    await sync(true, type);
+
+    expect(testRequests).toEqual([20]);
+    expect(resultRequests).toEqual([
+      { runId: 20, createdAfter: Math.floor(lastSync / 1000) },
+    ]);
+    expect(fields.run_10).toEqual(syncedRun);
+    expect(fields[getSyncKey(type)].state).toBe(SyncState.Complete);
+    const writes = (aha.account.setExtensionFields as jest.Mock).mock.calls;
+    expect(writes.every(([, values]) => !('run_10' in values))).toBe(true);
   });
 
   it('recovers discovered legacy runs, excluding ignored suites', async () => {

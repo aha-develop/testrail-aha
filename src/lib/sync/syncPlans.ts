@@ -4,7 +4,7 @@ import {
   waitForPagedLambda,
   waitForIndexedLambda,
 } from './interface';
-import { saveRecords, saveNewRuns } from '../extensionFields/updates';
+import { saveNewRuns } from '../extensionFields/updates';
 
 // We don't want to fetch more than a page of completed plans per project, to avoid loading up on historic data.
 const NUM_COMPLETED_PLANS = 250;
@@ -21,7 +21,6 @@ type SyncCompletedProps = BaseSyncProps & {
 
 type SyncRunProps = BaseSyncProps & {
   planIds: number[];
-  completed?: boolean;
   ignoredSuiteIds: number[];
 };
 
@@ -89,14 +88,12 @@ export const syncCompletedPlans: (
     domain,
     ignoredSuiteIds,
     planIds,
-    completed: true,
   });
 };
 
 const syncRunsForPlan: (props: SyncRunProps) => Promise<TestRun[]> = async ({
   domain,
   planIds,
-  completed = false,
   ignoredSuiteIds,
 }) => {
   if (!planIds || planIds.length === 0) {
@@ -121,12 +118,7 @@ const syncRunsForPlan: (props: SyncRunProps) => Promise<TestRun[]> = async ({
 
   runs = runs.filter(run => !ignoredSuiteIds.includes(run.suiteId));
 
-  // When syncing completed plans, only save new records to reduce syncing effort.
-  if (completed) {
-    runs = await saveNewRuns(runs);
-  } else {
-    await saveRecords<TestRun>(runs);
-  }
-
-  return runs;
+  // Completed runs can belong to open plans. Preserve their local sync marker
+  // and skip their children once they have been fully synced.
+  return await saveNewRuns(runs);
 };
