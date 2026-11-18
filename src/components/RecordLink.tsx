@@ -8,22 +8,23 @@ type Props = {
 };
 
 const RecordLink: React.FC<Props> = ({ record, domain }) => {
-  if (!domain) return null;
+  const subdomain = normalizeSubdomain(domain);
+  if (!subdomain) return null;
 
   let url;
   let prefix;
 
   switch (record.kind) {
     case 'TestCase':
-      url = `https://${normalizeSubdomain(domain)}.testrail.io/index.php?/cases/view/${record.id}`;
+      url = `https://${subdomain}.testrail.io/index.php?/cases/view/${record.id}`;
       prefix = 'C';
       break;
     case 'TestRun':
-      url = `https://${normalizeSubdomain(domain)}.testrail.io/index.php?/runs/view/${record.id}`;
+      url = `https://${subdomain}.testrail.io/index.php?/runs/view/${record.id}`;
       prefix = 'R';
       break;
     case 'Test':
-      url = `https://${normalizeSubdomain(domain)}.testrail.io/index.php?/tests/view/${record.id}`;
+      url = `https://${subdomain}.testrail.io/index.php?/tests/view/${record.id}`;
       prefix = 'T';
       break;
     default:

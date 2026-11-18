@@ -2,12 +2,16 @@ import { IDENTIFIER } from '../extension';
 import { ExtensionRecord } from './extensionRecord';
 import base64 from 'base64-js';
 
-export const normalizeSubdomain = (domain: string): string =>
-  domain
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, '')
-    .replace(/\.testrail\.io.*/, '');
+export const normalizeSubdomain = (domain: unknown): string | null => {
+  if (typeof domain !== 'string') return null;
+
+  // Accept a DNS label or a TestRail URL, but never arbitrary hosts, userinfo,
+  // ports, or backslashes. Build URLs from the captured label only.
+  const match = domain.trim().match(
+    /^(?:https?:\/\/)?([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.testrail\.io(?:[/?#][^\s\\]*)?)?$/i
+  );
+  return match ? match[1].toLowerCase() : null;
+};
 
 export type APIResult = {
   message?: string;
@@ -30,7 +34,8 @@ type LogProps = {
 };
 
 export type BaseParams = {
-  domain: string;
+  // Retained for existing event payloads. Authenticated requests ignore this value.
+  domain?: string;
   eventKey?: string;
   record: ExtensionRecord;
 };
@@ -94,14 +99,25 @@ const getHeaders: () => Headers = () => {
 };
 
 export const fetchTestRail: (props: FetchParams) => Promise<any> = async ({
-  domain,
   path,
   eventKey,
   record,
   method = 'GET',
   body,
 }) => {
-  const url = `https://${normalizeSubdomain(domain)}.testrail.io/index.php?/api/v2/${path}`;
+  // Resolve the destination on the server before accessing any credentials.
+  const subdomain = normalizeSubdomain(aha.settings.get(`${IDENTIFIER}.domain`));
+  if (!subdomain) {
+    await logResult({
+      record,
+      eventKey,
+      error: true,
+      message: 'Cannot connect to TestRail, configured subdomain is missing or invalid',
+    });
+    return null;
+  }
+
+  const url = `https://${subdomain}.testrail.io/index.php?/api/v2/${path}`;
 
   const headers = getHeaders();
 
@@ -117,9 +133,11 @@ export const fetchTestRail: (props: FetchParams) => Promise<any> = async ({
 
   console.log(`Fetching from TestRail - URL: ${url}`);
 
-  const args = {
+  const args: RequestInit = {
     method,
     headers,
+    // Do not let a redirect change the destination of an authenticated request.
+    redirect: 'error',
   };
 
   args['body'] = body ? JSON.stringify(body) : undefined;
