@@ -162,11 +162,12 @@ describe('completed run recovery', () => {
     });
   });
 
-  it('recovers legacy cached runs outside the recent API window, excluding ignored suites', async () => {
+  it('recovers discovered legacy runs, excluding ignored suites', async () => {
     fields.run_10 = copy(completedRun);
     fields.run_20 = { ...completedRun, id: 20, suiteId: 2 };
     fields.project_1_runIds = [10, 20];
     fields.ignoredSuites = [2];
+    standaloneRuns = [copy(fields.run_10), copy(fields.run_20)];
 
     await sync();
 
@@ -176,15 +177,32 @@ describe('completed run recovery', () => {
     expect(fields.test_100_comment.comment).toBe('Historical result');
   });
 
-  it('full resync revisits already synced completed runs, including older cached runs', async () => {
-    fields.run_10 = { ...completedRun, childrenSynced: true };
-    fields.project_1_runIds = [10];
+  it.each([
+    ['incremental sync', true, SyncType.All],
+    ['full resync', false, SyncType.All],
+    ['incremental test-only sync', true, SyncType.Tests],
+    ['full test-only resync', false, SyncType.Tests],
+  ] as const)('%s only loads runs returned by discovery', async (_name, getLatest, type) => {
+    // These may be outside the discovery window or deleted remotely. Neither
+    // the unfinished nor the fully synced historical record should be loaded.
+    fields.run_10 = copy(completedRun);
+    fields.run_20 = { ...completedRun, id: 20, childrenSynced: true };
+    fields.project_1_runIds = [10, 20];
+    standaloneRuns = [{ ...completedRun, id: 30 }];
 
-    await sync(false);
+    await sync(getLatest, type);
 
-    expect(testRequests).toEqual([10]);
-    expect(resultRequests).toEqual([{ runId: 10, createdAfter: undefined }]);
-    expect(fields.bulkSyncState.state).toBe(SyncState.Complete);
+    expect(testRequests).toEqual([30]);
+    expect(resultRequests).toEqual([{ runId: 30, createdAfter: undefined }]);
+    expect(fields.run_30.childrenSynced).toBe(true);
+    expect(fields.run_10.childrenSynced).toBeUndefined();
+    expect(fields.run_20.childrenSynced).toBe(true);
+    expect(fields[getSyncKey(type)].state).toBe(SyncState.Complete);
+
+    const requestedFields = (queryExtensionFields as jest.Mock).mock.calls
+      .flatMap(([names]) => names);
+    expect(requestedFields).not.toContain('run_10');
+    expect(requestedFields).not.toContain('run_20');
   });
 
   it('preserves incremental result fetching for open runs and deduplicates completed runs', async () => {

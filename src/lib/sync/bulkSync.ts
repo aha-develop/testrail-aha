@@ -8,10 +8,7 @@ import { syncCompletedPlans, syncOpenPlans } from './syncPlans';
 import { syncCompletedRuns, syncOpenRuns } from './syncRuns';
 import syncTests from './syncTests';
 import syncResults from './syncResults';
-import {
-  getProjectRecords,
-  getProjectSuiteMapping,
-} from '../extensionFields/queries';
+import { getProjectSuiteMapping } from '../extensionFields/queries';
 import { saveRecords } from '../extensionFields/updates';
 
 const MAX_RUN_TIME = 60 * 60 * 1000;
@@ -497,23 +494,11 @@ const syncRequiresProjects: (
 
     runs.push(...(await syncCompletedPlans(planParams)));
 
-    // Recover saved runs even if they have fallen outside TestRail's recent
-    // completed-run/plan window. A full resync also revisits synced cached runs.
-    const cachedRuns = await getProjectRecords<TestRun>(
-      results.projectIds,
-      'TestRun'
-    );
+    // We don't check historic runs due to scaling concerns - if you sync rarely and complete
+    // runs often, there's a risk this misses a run that completes and falls out of the completed run window.
+    // Given that window is 250 per project, and in daily usage we expect approx hourly frequency,
+    // that's a very unlikely edge case.
     const runsToSync = new Map<number, TestRun>();
-    for (const run of Object.values(cachedRuns).flat()) {
-      if (
-        run.completed &&
-        (!run.childrenSynced || !lastSync) &&
-        !results.ignoredSuiteIds.includes(run.suiteId)
-      ) {
-        runsToSync.set(run.id, run);
-      }
-    }
-    // Prefer freshly fetched metadata over cached records.
     for (const run of runs) runsToSync.set(run.id, run);
 
     newSyncState = {
@@ -583,7 +568,7 @@ const syncRequiresRuns: (
     await syncResults({ domain, runIds: [...completedRunIds] });
 
     // Persist completion only after both child stages (and all their writes)
-    // succeeded. Interrupted runs remain eligible for a later sync.
+    // succeeded. Interrupted runs remain eligible while discovery returns them.
     await saveRecords<TestRun>(
       completedRuns.map(run => ({ ...run, childrenSynced: true }))
     );
