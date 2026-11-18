@@ -43,7 +43,7 @@ type FetchParams = BaseParams & {
 
 export const RETRY_WAIT = 60;
 export const TIMEOUT_MESSAGE =
-  'API limit reached. Please try again in a few minutes.';
+  'API limit reached. Will retry after the specified time.';
 
 export const logResult: (props: LogProps) => void = async ({
   message,

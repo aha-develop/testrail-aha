@@ -354,7 +354,7 @@ const syncInitialRecords: (
 
     if (type === SyncType.Tests) {
       return [
-        { projectIds: projects.map(project => project.id) },
+        { projectIds: projects.map(project => project.id), ignoredSuiteIds },
         newSyncState,
       ];
     }

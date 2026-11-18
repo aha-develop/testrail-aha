@@ -18,7 +18,7 @@ export const linkRecord: (
   id: number,
   key: string
 ) => Promise<void> = async (record, id, key) => {
-  linkRecords(record, [id], key);
+  await linkRecords(record, [id], key);
 };
 
 export const linkRecords: (

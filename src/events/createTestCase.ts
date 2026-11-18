@@ -51,7 +51,7 @@ const createTestCase: (props: CreateProps) => Promise<void> = async ({
       title: json.title,
       projectId,
       suiteId: json.suite_id,
-      createdOn: json.createdOn,
+      createdOn: json.created_on,
     };
 
     await logResult({
