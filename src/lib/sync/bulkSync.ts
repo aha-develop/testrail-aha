@@ -1,4 +1,4 @@
-import { IDENTIFIER } from '../../extension';
+import { IDENTIFIER, TestRun } from '../../extension';
 import syncStatuses from './syncStatuses';
 import syncProjects from './syncProjects';
 import syncSuites from './syncSuites';
@@ -9,6 +9,7 @@ import { syncCompletedRuns, syncOpenRuns } from './syncRuns';
 import syncTests from './syncTests';
 import syncResults from './syncResults';
 import { getProjectSuiteMapping } from '../extensionFields/queries';
+import { saveRecords } from '../extensionFields/updates';
 
 const MAX_RUN_TIME = 60 * 60 * 1000;
 
@@ -61,6 +62,7 @@ type SyncResults = {
   projectIds?: number[];
   projectSuites?: { [projectId: string]: number[] };
   runIds?: number[];
+  completedRuns?: TestRun[];
   ignoredSuiteIds?: number[];
 };
 
@@ -354,7 +356,7 @@ const syncInitialRecords: (
 
     if (type === SyncType.Tests) {
       return [
-        { projectIds: projects.map(project => project.id) },
+        { projectIds: projects.map(project => project.id), ignoredSuiteIds },
         newSyncState,
       ];
     }
@@ -424,7 +426,7 @@ const syncRequiresProjects: (
   let newSyncState = { ...syncState };
 
   try {
-    const runs = [];
+    const runs: TestRun[] = [];
 
     if (syncState.stage === SyncStage.TestCases) {
       const caseParams = {
@@ -492,6 +494,13 @@ const syncRequiresProjects: (
 
     runs.push(...(await syncCompletedPlans(planParams)));
 
+    // We don't check historic runs due to scaling concerns - if you sync rarely and complete
+    // runs often, there's a risk this misses a run that completes and falls out of the completed run window.
+    // Given that window is 250 per project, and in daily usage we expect approx hourly frequency,
+    // that's a very unlikely edge case.
+    const runsToSync = new Map<number, TestRun>();
+    for (const run of runs) runsToSync.set(run.id, run);
+
     newSyncState = {
       ...syncState,
       progress: progressForStage(SyncStage.Tests, type),
@@ -500,7 +509,14 @@ const syncRequiresProjects: (
 
     await setSyncState(newSyncState);
 
-    return [{ ...results, runIds: runs.map(run => run.id) }, newSyncState];
+    return [
+      {
+        ...results,
+        runIds: [...runsToSync.keys()],
+        completedRuns: [...runsToSync.values()].filter(run => run.completed),
+      },
+      newSyncState,
+    ];
   } catch (error) {
     console.log('Error during sync:', error);
     syncState = { ...newSyncState, state: SyncState.Errored };
@@ -538,13 +554,24 @@ const syncRequiresRuns: (
 
     await setSyncState(newSyncState);
 
+    const completedRuns = results.completedRuns;
+    const completedRunIds = new Set(completedRuns.map(run => run.id));
     const resultParams = {
       domain,
       lastResultSync: lastSync,
-      runIds: results.runIds,
+      runIds: results.runIds.filter(id => !completedRunIds.has(id)),
     };
 
     await syncResults(resultParams);
+
+    // These runs may have missed results older than the account-wide watermark.
+    await syncResults({ domain, runIds: [...completedRunIds] });
+
+    // Persist completion only after both child stages (and all their writes)
+    // succeeded. Interrupted runs remain eligible while discovery returns them.
+    await saveRecords<TestRun>(
+      completedRuns.map(run => ({ ...run, childrenSynced: true }))
+    );
 
     await finishSync(newSyncState, type, setSyncState);
   } catch (error) {

@@ -156,7 +156,7 @@ describe('saveNewRuns', () => {
     jest.clearAllMocks();
   });
 
-  it('saves only non-completed runs', async () => {
+  it('skips completed runs only after their children have synced', async () => {
     const runs: TestRun[] = [
       {
         kind: 'TestRun',
@@ -180,7 +180,7 @@ describe('saveNewRuns', () => {
 
     mockGetExtensionMap.mockResolvedValueOnce({
       run_1: { completed: false },
-      run_2: { completed: true },
+      run_2: { completed: true, childrenSynced: true },
     });
 
     mockGetExtensionMap.mockResolvedValueOnce({
@@ -199,6 +199,20 @@ describe('saveNewRuns', () => {
     expect(mockSetExtensionFields).toHaveBeenNthCalledWith(2, IDENTIFIER, {
       project_100_runIds: [3, 4, 1],
     });
+  });
+
+  it.each([undefined, false])('retries completed runs with childrenSynced=%s', async childrenSynced => {
+    const run: TestRun = {
+      kind: 'TestRun', id: 1, projectId: 100, suiteId: 1,
+      name: 'Run 1', createdOn: 0, completed: true,
+    };
+    mockGetExtensionMap.mockResolvedValueOnce({
+      run_1: { ...run, childrenSynced },
+    });
+    mockGetExtensionMap.mockResolvedValueOnce({ project_100_runIds: [1] });
+
+    expect(await saveNewRuns([run])).toEqual([run]);
+    expect(mockSetExtensionFields).toHaveBeenCalledWith(IDENTIFIER, { run_1: run });
   });
 
   it('returns empty array for empty input', async () => {

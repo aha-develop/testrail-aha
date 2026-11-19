@@ -20,19 +20,15 @@ type SyncTestRunsProps = TestRunProps & {
   limit?: number;
 };
 
-const syncActiveTestRuns: (props: SyncActiveTestRunsProps) => void = async ({
-  domain,
-  record,
-  eventKey,
-  page,
-  projectId,
-}) => {
+const syncActiveTestRuns: (
+  props: SyncActiveTestRunsProps
+) => Promise<void> = async ({ domain, record, eventKey, page, projectId }) => {
   console.log(
     `Beginning sync of active TestRail test runs for project: ${projectId} page: ${page}`
   );
   const offset = page ? (page - 1) * 250 : 0;
 
-  syncTestRuns({
+  await syncTestRuns({
     domain,
     record,
     eventKey,
@@ -44,12 +40,12 @@ const syncActiveTestRuns: (props: SyncActiveTestRunsProps) => void = async ({
 
 const syncCompletedTestRuns: (
   props: SyncCompletedTestRunsProps
-) => void = async ({ domain, record, eventKey, limit, projectId }) => {
+) => Promise<void> = async ({ domain, record, eventKey, limit, projectId }) => {
   console.log(
     `Beginning sync of completed TestRail test runs for project: ${projectId}`
   );
 
-  syncTestRuns({
+  await syncTestRuns({
     domain,
     record,
     eventKey,
@@ -59,7 +55,7 @@ const syncCompletedTestRuns: (
   });
 };
 
-const syncTestRuns: (props: SyncTestRunsProps) => void = async ({
+const syncTestRuns: (props: SyncTestRunsProps) => Promise<void> = async ({
   domain,
   record,
   eventKey,

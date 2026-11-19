@@ -1,6 +1,6 @@
 import { IDENTIFIER } from '../../extension';
 import { waitForPagedLambda, waitForIndexedLambda } from './interface';
-import { saveRecords, saveNewRuns } from '../extensionFields/updates';
+import { saveNewRuns } from '../extensionFields/updates';
 import { syncOpenPlans, syncCompletedPlans } from './syncPlans';
 
 jest.mock('./interface', () => ({
@@ -9,7 +9,6 @@ jest.mock('./interface', () => ({
 }));
 
 jest.mock('../extensionFields/updates', () => ({
-  saveRecords: jest.fn(),
   saveNewRuns: jest.fn(),
 }));
 
@@ -78,6 +77,7 @@ describe('syncOpenPlans', () => {
 
     mockWaitIndexed.mockResolvedValue(mockPlanIds);
     mockWaitPaged.mockResolvedValue(mockRuns);
+    mockSaveRuns.mockResolvedValue(mockRuns);
 
     const result = await syncOpenPlans({
       domain: 'test',
@@ -113,7 +113,7 @@ describe('syncOpenPlans', () => {
       expect.any(Number)
     );
 
-    expect(saveRecords).toHaveBeenCalledWith(mockRuns);
+    expect(saveNewRuns).toHaveBeenCalledWith(mockRuns);
     expect(result).toEqual(mockRuns);
   });
 
@@ -143,6 +143,8 @@ describe('syncOpenPlans', () => {
 
     mockWaitIndexed.mockResolvedValue(mockPlanIds);
     mockWaitPaged.mockResolvedValue(mockRuns);
+    const filteredRuns = mockRuns.filter(run => run.suiteId !== 1);
+    mockSaveRuns.mockResolvedValue(filteredRuns);
 
     const result = await syncOpenPlans({
       domain: 'test',
@@ -174,8 +176,7 @@ describe('syncOpenPlans', () => {
       expect.any(Number)
     );
 
-    const filteredRuns = mockRuns.filter(run => run.suiteId !== 1);
-    expect(saveRecords).toHaveBeenCalledWith(filteredRuns);
+    expect(saveNewRuns).toHaveBeenCalledWith(filteredRuns);
     expect(result).toEqual(filteredRuns);
   });
 });

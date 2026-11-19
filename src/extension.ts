@@ -48,6 +48,8 @@ export type TestRun = {
   name: string;
   createdOn: number;
   completed: boolean;
+  // Set locally only after tests and results were saved for a completed run.
+  childrenSynced?: boolean;
 };
 
 export type Test = {
