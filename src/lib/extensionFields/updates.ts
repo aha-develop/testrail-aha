@@ -3,6 +3,7 @@ import {
   TestRailRecord,
   TestRun,
   TestResult,
+  Test,
 } from '../../extension';
 import { ExtensionRecord } from '../extensionRecord';
 import { syncCaseReferences } from '../sync/syncCaseReferences';
@@ -12,7 +13,8 @@ import {
   getAccountExtensionFieldMap,
 } from './queries';
 
-const MAX_FIELDS_PER_SAVE = 500;
+import saveChunked, { MAX_FIELDS_PER_SAVE } from './saveChunked';
+import { updateLatestTestedCaseIndexes } from './latestTestedCases';
 
 export const linkRecord: (
   record: ExtensionRecord,
@@ -74,6 +76,9 @@ export const saveRecords: <T extends TestRailRecord>(
 
   await saveChunked(fields);
   await updateRecordIndexes(records);
+  await updateLatestTestedCaseIndexes(
+    records.filter(record => record.kind === 'Test') as Test[]
+  );
 };
 
 export const saveNewRuns: (
@@ -177,17 +182,6 @@ export const linkResultsToTests = async (results: TestResult[]) => {
   if (!shouldUpdate) return;
 
   await saveChunked(fields);
-};
-
-const saveChunked: (
-  fields: [string, any][]
-) => Promise<void> = async fields => {
-  for (let i = 0; i < fields.length; i += MAX_FIELDS_PER_SAVE) {
-    const chunk = fields.slice(i, i + MAX_FIELDS_PER_SAVE);
-    const chunkFields = Object.fromEntries(chunk);
-
-    await aha.account.setExtensionFields(IDENTIFIER, chunkFields);
-  }
 };
 
 export const deleteChunked: (

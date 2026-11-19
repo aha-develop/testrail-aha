@@ -1,0 +1,177 @@
+import { Test, TestCase, TestRun } from '../../extension';
+import { fieldName, getAccountExtensionFieldMap, getRecords } from './queries';
+import saveChunked from './saveChunked';
+
+// Run IDs are allocated sequentially. This is a discovery budget, not a
+// retention window: normal sync may keep a known result from an older run.
+export const LATEST_TESTED_RUN_SEARCH_LIMIT = 20;
+const RUN_METADATA_BATCH_SIZE = 100;
+const UNTESTED_STATUS_ID = 3;
+
+export type LatestTestedCaseIndex = {
+  initialized: boolean;
+  latest: { testId: number; runId: number } | null;
+};
+
+export const latestTestedCaseKey = (caseId: number): string =>
+  `case_${caseId}_latestTested`;
+
+// Discovery and Test sync can overlap in a tab. Serialize their index writes
+// and let subsequent readers reuse completed discovery (including misses).
+let pendingIndexWork: Promise<unknown> = Promise.resolve();
+function withIndexLock<T>(work: () => Promise<T>): Promise<T> {
+  const result = pendingIndexWork.then(work);
+  pendingIndexWork = result.catch(() => undefined);
+  return result;
+}
+
+const isTested = (test: Test): boolean =>
+  typeof test.statusId === 'number' && test.statusId !== UNTESTED_STATUS_ID;
+
+const suiteKey = (record: TestCase | TestRun): string =>
+  `${record.projectId}_${record.suiteId}`;
+
+// Read metadata in descending-ID batches rather than loading every historical
+// run. Cases in the same suite share the same bounded list of candidate runs.
+async function getCandidateRuns(
+  cases: TestCase[]
+): Promise<Map<string, TestRun[]>> {
+  const groups = new Map<string, TestRun[]>();
+  for (const testCase of cases) groups.set(suiteKey(testCase), []);
+  const projectIds = [...new Set(cases.map(testCase => testCase.projectId))];
+  const indexes = await getAccountExtensionFieldMap<number[]>(
+    projectIds.map(id => `project_${id}_runIds`)
+  );
+  const remaining = new Map(
+    projectIds.map(id => [
+      id,
+      [...new Set(indexes[`project_${id}_runIds`] ?? [])].sort((a, b) => b - a),
+    ])
+  );
+
+  while (remaining.size) {
+    const ids: number[] = [];
+    for (const [projectId, runIds] of remaining) {
+      const needsRuns = cases.some(
+        testCase =>
+          testCase.projectId === projectId &&
+          groups.get(suiteKey(testCase)).length < LATEST_TESTED_RUN_SEARCH_LIMIT
+      );
+      if (!needsRuns || !runIds.length) {
+        remaining.delete(projectId);
+      } else {
+        ids.push(...runIds.splice(0, RUN_METADATA_BATCH_SIZE));
+      }
+    }
+    if (!ids.length) break;
+    const runRecords = await getRecords<TestRun>(ids, 'TestRun');
+    for (const run of runRecords) {
+      const group = groups.get(suiteKey(run));
+      if (group && group.length < LATEST_TESTED_RUN_SEARCH_LIMIT) group.push(run);
+    }
+  }
+  return groups;
+}
+
+export function getLatestTestedTestsForCases(
+  cases: TestCase[]
+): Promise<Record<number, Test>> {
+  if (!cases.length) return Promise.resolve({});
+  return withIndexLock(async () => {
+    const uniqueCases = [
+      ...new Map(cases.map(testCase => [testCase.id, testCase])).values(),
+    ];
+    const indexes = await getAccountExtensionFieldMap<LatestTestedCaseIndex>(
+      uniqueCases.map(testCase => latestTestedCaseKey(testCase.id))
+    );
+    const recordKeys = Object.values(indexes).flatMap(index =>
+      index.latest
+        ? [fieldName('Test', index.latest.testId), fieldName('TestRun', index.latest.runId)]
+        : []
+    );
+    const records = await getAccountExtensionFieldMap<Test | TestRun>([
+      ...new Set(recordKeys),
+    ]);
+    const tests: Record<number, Test> = {};
+    const needsDiscovery: TestCase[] = [];
+
+    for (const testCase of uniqueCases) {
+      const index = indexes[latestTestedCaseKey(testCase.id)];
+      const latest = index?.latest;
+      const test = latest ? records[fieldName('Test', latest.testId)] as Test : undefined;
+      const run = latest ? records[fieldName('TestRun', latest.runId)] as TestRun : undefined;
+      const valid = test && run &&
+        test.caseId === testCase.id && test.runId === run.id &&
+        suiteKey(run) === suiteKey(testCase) && isTested(test);
+      if (valid) tests[testCase.id] = test;
+      if (!index?.initialized || (latest && !valid)) {
+        needsDiscovery.push(testCase);
+      }
+    }
+
+    if (!needsDiscovery.length) return tests;
+
+    const groups = await getCandidateRuns(needsDiscovery);
+    const runs = [...groups.values()].flat();
+    const runTests = await getAccountExtensionFieldMap<number[]>(
+      runs.map(run => `run_${run.id}_testIds`)
+    );
+    // Fetch the bounded candidates for all cases together, avoiding a request
+    // per case or per run. Only Tests in the selected run indexes are eligible.
+    const testIds = [...new Set(Object.values(runTests).flat())];
+    const candidates = await getRecords<Test>(testIds, 'Test');
+    const runMap = new Map(runs.map(run => [run.id, run]));
+    const caseMap = new Map(needsDiscovery.map(testCase => [testCase.id, testCase]));
+    for (const test of candidates) {
+      const testCase = caseMap.get(test.caseId);
+      const run = runMap.get(test.runId);
+      if (!testCase || !run || suiteKey(run) !== suiteKey(testCase) || !isTested(test)) {
+        continue;
+      }
+      if (!tests[test.caseId] || test.runId > tests[test.caseId].runId) {
+        tests[test.caseId] = test;
+      }
+    }
+
+    await saveChunked(
+      needsDiscovery.map(testCase => {
+        const test = tests[testCase.id];
+        return [latestTestedCaseKey(testCase.id), {
+          initialized: true,
+          latest: test ? { testId: test.id, runId: test.runId } : null,
+        }];
+      })
+    );
+    return tests;
+  });
+}
+
+// Maintain only cases that have been viewed. Syncing an old dataset must not
+// create an account-wide backfill. A miss becomes a hit when a Test is tested.
+export function updateLatestTestedCaseIndexes(tests: Test[]): Promise<void> {
+  if (!tests.length) return Promise.resolve();
+  return withIndexLock(async () => {
+    const keys = [...new Set(tests.map(test => latestTestedCaseKey(test.caseId)))];
+    const indexes = await getAccountExtensionFieldMap<LatestTestedCaseIndex>(keys);
+    const updates: Record<string, LatestTestedCaseIndex> = {};
+    const testsById = new Map(tests.map(test => [test.id, test]));
+
+    for (const key of keys) {
+      const index = indexes[key];
+      if (!index) continue;
+      const winner = index.latest && testsById.get(index.latest.testId);
+      if (winner && !isTested(winner)) {
+        updates[key] = { initialized: false, latest: null };
+      }
+    }
+    for (const test of tests) {
+      const key = latestTestedCaseKey(test.caseId);
+      const index = updates[key] ?? indexes[key];
+      if (!index || !isTested(test)) continue;
+      if (!index.latest || test.runId > index.latest.runId) {
+        updates[key] = { ...index, latest: { testId: test.id, runId: test.runId } };
+      }
+    }
+    await saveChunked(Object.entries(updates));
+  });
+}

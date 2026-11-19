@@ -7,6 +7,7 @@ import {
   indexKeyForKindAndParent,
 } from './extensionFields/queries';
 import { deleteChunked } from './extensionFields/updates';
+import { latestTestedCaseKey } from './extensionFields/latestTestedCases';
 
 // Given a list of of ignored suite IDs, find all associated records (Sections, TestCases and TestRuns) and delete their references,
 // and mark the suites as ignored. Unfortunately we store records indexed by Project ID, so we have to fetch all records
@@ -56,6 +57,7 @@ export const deleteIgnoredSuiteRecords: (
     for (const testCase of projectTestCases) {
       if (suiteIds.includes(testCase.suiteId)) {
         recordsToDelete.push(fieldName('TestCase', testCase.id));
+        recordsToDelete.push(latestTestedCaseKey(testCase.id));
       } else {
         testCasesToKeep.push(testCase.id);
       }

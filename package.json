@@ -118,6 +118,15 @@
         }
       },
       "settings": {
+        "showLatestTestedResultForCases": {
+          "title": "Show latest tested result for linked cases",
+          "type": "boolean",
+          "description": "Show the latest locally synced tested result for cases without an explicitly linked test. Initial discovery checks the 20 most recent runs in the case's suite. Does not create test or run links or update their references.",
+          "scope": [
+            "account"
+          ],
+          "default": false
+        },
         "syncCaseReferences": {
           "title": "Sync Aha! references to test cases",
           "type": "boolean",
