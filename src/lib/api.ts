@@ -5,11 +5,12 @@ import base64 from 'base64-js';
 export const normalizeSubdomain = (domain: unknown): string | null => {
   if (typeof domain !== 'string') return null;
 
-  // Accept a DNS label or a TestRail URL, but never arbitrary hosts, userinfo,
-  // ports, or backslashes. Build URLs from the captured label only.
-  const match = domain.trim().match(
-    /^(?:https?:\/\/)?([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.testrail\.io(?:[/?#][^\s\\]*)?)?$/i
-  );
+  // Ensure the input is either a valid DNS label or a TestRail URL, and extract the subdomain.
+  const match = domain
+    .trim()
+    .match(
+      /^(?:https?:\/\/)?([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(?:\.testrail\.io(?:[/?#][^\s\\]*)?)?$/i
+    );
   return match ? match[1].toLowerCase() : null;
 };
 
@@ -34,7 +35,7 @@ type LogProps = {
 };
 
 export type BaseParams = {
-  // Retained for existing event payloads. Authenticated requests ignore this value.
+  // Retained for existing event payloads. New requests use the settings.
   domain?: string;
   eventKey?: string;
   record: ExtensionRecord;
@@ -60,6 +61,7 @@ export const isTimeoutMessage = (message?: string): boolean =>
 
 export const getTimeoutRetryAt = (message?: string): number => {
   const retryAt = Number(TIMEOUT_REGEX.exec(message ?? '')?.[1]);
+
   if (
     Number.isSafeInteger(retryAt) &&
     retryAt >= 0 &&
@@ -68,6 +70,7 @@ export const getTimeoutRetryAt = (message?: string): number => {
     return retryAt;
   }
 
+  // Fallback to a full minute in the case of an unknown retryAt
   return Date.now() + RETRY_WAIT * 1000;
 };
 
@@ -127,13 +130,16 @@ export const fetchTestRail: (props: FetchParams) => Promise<any> = async ({
   body,
 }) => {
   // Resolve the destination on the server before accessing any credentials.
-  const subdomain = normalizeSubdomain(aha.settings.get(`${IDENTIFIER}.domain`));
+  const subdomain = normalizeSubdomain(
+    aha.settings.get(`${IDENTIFIER}.domain`)
+  );
   if (!subdomain) {
     await logResult({
       record,
       eventKey,
       error: true,
-      message: 'Cannot connect to TestRail, configured subdomain is missing or invalid',
+      message:
+        'Cannot connect to TestRail, configured subdomain is missing or invalid',
     });
     return null;
   }
@@ -168,10 +174,13 @@ export const fetchTestRail: (props: FetchParams) => Promise<any> = async ({
   if (!response.ok) {
     if (response.status === 429) {
       const retryAfter = parseInt(response.headers.get('Retry-After') ?? '');
-      const retryAfterMs =
-        (Number.isFinite(retryAfter) && retryAfter >= 0
-          ? retryAfter
-          : RETRY_WAIT) * 1000;
+
+      let retryAfterMs = RETRY_WAIT * 1000;
+
+      if (Number.isFinite(retryAfter) && retryAfter >= 0) {
+        retryAfterMs = retryAfter * 1000;
+      }
+
       const retryAt = Date.now() + retryAfterMs;
       const timeoutResult: APIResult = {
         error: true,
@@ -180,22 +189,12 @@ export const fetchTestRail: (props: FetchParams) => Promise<any> = async ({
 
       const retryTime = new Date(retryAt).toISOString().slice(11, 19);
       console.error(`API limit reached. Will retry after ${retryTime} UTC`);
-      console.log('Storing API retry-at in Aha!');
 
-      if (!eventKey || record === aha.account) {
-        // Send both fields in one request. The result carries its own deadline
-        // so readers do not depend on the fields becoming visible together.
-        await aha.account.setExtensionFields(IDENTIFIER, {
-          retryAt,
-          ...(eventKey ? { [eventKey]: timeoutResult } : {}),
-        });
-      } else {
-        // Results for other records cannot share the account's bulk write.
-        await Promise.all([
-          aha.account.setExtensionField(IDENTIFIER, 'retryAt', retryAt),
-          record.setExtensionField(IDENTIFIER, eventKey, timeoutResult),
-        ]);
-      }
+      // Including the retry time in the error removes any potential race here.
+      await Promise.all([
+        aha.account.setExtensionField(IDENTIFIER, 'retryAt', retryAt),
+        record.setExtensionField(IDENTIFIER, eventKey, timeoutResult),
+      ]);
 
       return null;
     }

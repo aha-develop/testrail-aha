@@ -69,7 +69,8 @@ const callLambdaBatch = async ({
   argsForKeys,
   minimumRetryAt = 0,
 }: IndexCallProps & { minimumRetryAt?: number }) => {
-  // Check once for the group being dispatched, including any selective retries.
+  // Check the group being dispatched, including any selective retries,
+  // then loop in case another request triggered an API timeout.
   while (true) {
     const { retryAt } = await getAccountExtensionFieldMap<number>(['retryAt']);
     const delay = Math.max(minimumRetryAt, retryAt || 0) - Date.now();
@@ -77,7 +78,6 @@ const callLambdaBatch = async ({
     if (!(delay > 0)) break;
 
     await sleep(delay);
-    // Another request may have extended the account-wide cooldown while we waited.
   }
 
   for (const eventKey of eventKeys) {
@@ -85,7 +85,9 @@ const callLambdaBatch = async ({
   }
 };
 
-const waitForResults = async (eventKeys: string[]): Promise<LambdaResultMap> => {
+const waitForResults = async (
+  eventKeys: string[]
+): Promise<LambdaResultMap> => {
   const initialTime = Date.now();
   const results: LambdaResultMap = {};
   let error: string | null = null;
@@ -95,12 +97,15 @@ const waitForResults = async (eventKeys: string[]): Promise<LambdaResultMap> => 
 
   while (Date.now() - initialTime < MAX_POLL_TIME) {
     const pendingKeys = eventKeys.filter(key => !results[key]);
-    const fetched = await getAccountExtensionFieldMap<LambdaResult>(pendingKeys);
+    const fetched =
+      await getAccountExtensionFieldMap<LambdaResult>(pendingKeys);
 
     for (const eventKey of pendingKeys) {
       const result = fetched[eventKey];
+
       if (result?.message) {
         results[eventKey] = result;
+
         if (result.error && !isRateLimited(result)) {
           error = result.message;
           break;
@@ -108,8 +113,7 @@ const waitForResults = async (eventKeys: string[]): Promise<LambdaResultMap> => 
       }
     }
 
-    // A 429 is a completed attempt. Wait for the other requests before retrying
-    // so missing results are never mistaken for requests that need resubmitting.
+    // Only stop when we have a non-timeout error, or all requests resolved.
     if (error || eventKeys.every(key => results[key])) break;
 
     await sleep(INTERVAL_TIME);
@@ -148,18 +152,20 @@ const executeLambdaBatch = async ({
       argsForKeys,
       minimumRetryAt,
     });
+
     const attempt = await waitForResults(pendingKeys);
     Object.assign(results, attempt);
 
     if (
-      Object.values(attempt).some(result => result.error && !isRateLimited(result))
+      Object.values(attempt).some(
+        result => result.error && !isRateLimited(result)
+      )
     ) {
       return results;
     }
 
-    // Keep successes from every attempt; only rate-limited requests are resent.
+    // Identify results to retry, and get the max retry time from their responses.
     pendingKeys = pendingKeys.filter(key => isRateLimited(attempt[key]));
-    // Resolve fallback deadlines once per attempt, not on every cooldown poll.
     minimumRetryAt = pendingKeys.reduce(
       (deadline, key) =>
         Math.max(deadline, getTimeoutRetryAt(attempt[key].message)),
@@ -237,14 +243,16 @@ export const waitForPagedLambda: <T>(
     eventKeys,
     argsForKeys,
   });
+
   // Page order must be preserved even when earlier pages complete on a retry.
   let fetchResults = eventKeys.map(key => batchResults[key]);
 
   argsForKeys = {}; // Reset for next batch
+
   let error = fetchResults.find(result => result.error)?.message;
   if (error) throw new Error(error);
-  let hasMore = true;
 
+  let hasMore = true;
   if (isPaginated && usePage) {
     hasMore = fetchResults[fetchResults.length - 1].result?.hasMore;
   } else {
@@ -288,13 +296,16 @@ export const waitForPagedLambda: <T>(
     // Circuit break in the event hasMore was set incorrectly
     if (eventKeys.length === 0) break;
 
-    batchResults = await executeLambdaBatch({ lambdaFunc, eventKeys, argsForKeys });
-    fetchResults = eventKeys.map(key => batchResults[key]);
+    batchResults = await executeLambdaBatch({
+      lambdaFunc,
+      eventKeys,
+      argsForKeys,
+    });
 
+    fetchResults = eventKeys.map(key => batchResults[key]);
     argsForKeys = {};
 
     error = fetchResults.find(result => result.error)?.message;
-
     if (error) throw new Error(error);
 
     if (isPaginated && usePage) {

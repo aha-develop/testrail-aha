@@ -118,7 +118,6 @@ const syncRunsForPlan: (props: SyncRunProps) => Promise<TestRun[]> = async ({
 
   runs = runs.filter(run => !ignoredSuiteIds.includes(run.suiteId));
 
-  // Completed runs can belong to open plans. Preserve their local sync marker
-  // and skip their children once they have been fully synced.
+  // If we re-save completed runs we will clear the children-synced marker.
   return await saveNewRuns(runs);
 };
