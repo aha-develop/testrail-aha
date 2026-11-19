@@ -1,14 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { IDENTIFIER, Project, Section, Suite, TestCase } from '../../extension';
+import { IDENTIFIER, Project, Section, Suite } from '../../extension';
 import { ExtensionRecord } from '../../lib/extensionRecord';
 import SearchByName, { TreeNode } from './SearchByName';
 import {
   getRecords,
   getProjectRecords,
 } from '../../lib/extensionFields/queries';
-import { waitForLambda } from '../../lib/sync/interface';
-import { APIResult } from '../../lib/api';
-import { saveRecords, linkRecord } from '../../lib/extensionFields/updates';
+import type { CreateTestCaseResult } from '../../lib/createTestCase';
+import { createAndLinkTestCase } from '../../lib/createAndLinkTestCase';
 import { BulkSyncState, SyncStage, SyncState } from '../../lib/sync/bulkSync';
 import SyncProgress from '../SyncProgress';
 
@@ -17,16 +16,6 @@ type Props = {
   record: ExtensionRecord;
   syncData: BulkSyncState;
   onClose: () => void;
-};
-
-type CreateProps = {
-  domain: string;
-  title: string;
-  precondition: string;
-  steps: string;
-  results: string;
-  sectionId: string;
-  projectId: string;
 };
 
 const sectionOptions: (
@@ -142,43 +131,6 @@ const findChild: (node: TreeNode, value: string) => boolean = (node, value) => {
   return false;
 };
 
-const createTestCase: (props: CreateProps) => Promise<TestCase> = async ({
-  domain,
-  title,
-  precondition,
-  steps,
-  results,
-  sectionId,
-  projectId,
-}) => {
-  const sectionIdNum = Number.parseInt(sectionId);
-  const projectIdNum = Number.parseInt(projectId);
-
-  const eventKey = `createTestCase-${Date.now()}`;
-
-  const lambdaFunc = async args => {
-    await aha.triggerServer(`${IDENTIFIER}.createTestCase`, args);
-  };
-
-  const args = {
-    domain,
-    title,
-    precondition,
-    steps,
-    results,
-    sectionId: sectionIdNum,
-    projectId: projectIdNum,
-  };
-
-  const result = await waitForLambda<APIResult>({ lambdaFunc, args, eventKey });
-
-  if (!result || result.error) {
-    throw new Error(result?.message || 'Could not create test case');
-  }
-
-  return result.result as TestCase;
-};
-
 const CreateTestCase: React.FC<Props> = ({
   domain,
   record,
@@ -190,7 +142,7 @@ const CreateTestCase: React.FC<Props> = ({
   const preconditionRef = useRef(null);
   const stepsRef = useRef(null);
   const resultsRef = useRef(null);
-  const createdCaseRef = useRef<TestCase | null>(null);
+  const createdCaseRef = useRef<CreateTestCaseResult | null>(null);
 
   const [title, setTitle] = useState<string>('');
   const [precondition, setPrecondition] = useState<string>('');
@@ -222,10 +174,9 @@ const CreateTestCase: React.FC<Props> = ({
     setSaving(true);
     setError(null);
     try {
-      // Retain a successful create before attempting the separate link, so a
-      // reference-sync failure can be retried without creating another case.
-      if (!createdCaseRef.current) {
-        createdCaseRef.current = await createTestCase({
+      await createAndLinkTestCase(
+        {
+          record,
           domain,
           title: titleRef.current.value,
           precondition: preconditionRef.current.value,
@@ -233,10 +184,9 @@ const CreateTestCase: React.FC<Props> = ({
           results: resultsRef.current.value,
           sectionId: sectionIdRef.current,
           projectId: projectIdRef.current,
-        });
-      }
-      await saveRecords([createdCaseRef.current]);
-      await linkRecord(record, createdCaseRef.current.id, 'caseIds');
+        },
+        createdCaseRef
+      );
       onClose();
     } catch (error) {
       setError(

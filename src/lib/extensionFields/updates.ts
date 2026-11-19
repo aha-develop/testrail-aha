@@ -16,19 +16,26 @@ import {
 import saveChunked, { MAX_FIELDS_PER_SAVE } from './saveChunked';
 import { updateLatestTestedCaseIndexes } from './latestTestedCases';
 
+type LinkOptions = {
+  // Only set after a successful create response confirms reference handling.
+  referenceHandled?: boolean;
+};
+
 export const linkRecord: (
   record: ExtensionRecord,
   id: number,
-  key: string
-) => Promise<void> = async (record, id, key) => {
-  await linkRecords(record, [id], key);
+  key: string,
+  options?: LinkOptions
+) => Promise<void> = async (record, id, key, options) => {
+  await linkRecords(record, [id], key, options);
 };
 
 export const linkRecords: (
   record: ExtensionRecord,
   ids: number[],
-  key: string
-) => Promise<void> = async (record, ids, key) => {
+  key: string,
+  options?: LinkOptions
+) => Promise<void> = async (record, ids, key, options = {}) => {
   if (ids.length === 0) return;
 
   let indexField = await record.getExtensionField<number[]>(IDENTIFIER, key);
@@ -41,7 +48,9 @@ export const linkRecords: (
   if (ids.length === 0) return;
 
   // Keep the link action retryable if TestRail rejects the reference update.
-  if (key === 'caseIds') await syncCaseReferences(record, ids, 'add');
+  if (key === 'caseIds' && !options.referenceHandled) {
+    await syncCaseReferences(record, ids, 'add');
+  }
 
   indexField = indexField.concat(ids);
   await record.setExtensionField(IDENTIFIER, key, indexField);

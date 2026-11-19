@@ -61,6 +61,17 @@ describe('case link reference syncing', () => {
     expect(mockSetExtensionField).not.toHaveBeenCalled();
   });
 
+  it('saves a new link without syncing a reference already handled during creation', async () => {
+    await linkRecord(mockRecord, 456, 'caseIds', { referenceHandled: true });
+    expect(mockSyncReferences).not.toHaveBeenCalled();
+    expect(mockSetExtensionField).toHaveBeenCalledWith(IDENTIFIER, 'caseIds', [123, 456]);
+  });
+
+  it('syncs references when creation did not confirm handling them', async () => {
+    await linkRecord(mockRecord, 456, 'caseIds', { referenceHandled: false });
+    expect(mockSyncReferences).toHaveBeenCalledWith(mockRecord, [456], 'add');
+  });
+
   it('syncs the removal before unlinking', async () => {
     await unlinkRecord(mockRecord, 123, 'caseIds');
     expect(mockSyncReferences).toHaveBeenCalledWith(mockRecord, [123], 'remove');
