@@ -29,10 +29,20 @@ const TestRow: React.FC<RowProps> = ({
   canDelete = true,
 }) => {
   const [linkTestModalOpen, setLinkTestModalOpen] = useState(false);
+  const [unlinking, setUnlinking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const unlink = () => {
-    unlinkRecord(record, testCase.id, 'caseIds');
-    if (test) unlinkRecord(record, test.id, 'testIds');
+  const unlink = async () => {
+    setUnlinking(true);
+    setError(null);
+    try {
+      await unlinkRecord(record, testCase.id, 'caseIds');
+      if (test) await unlinkRecord(record, test.id, 'testIds');
+    } catch (error) {
+      setError(error.message || 'Could not unlink test case. Please try again.');
+    } finally {
+      setUnlinking(false);
+    }
   };
 
   return (
@@ -43,6 +53,7 @@ const TestRow: React.FC<RowProps> = ({
         </div>
         <div>
           <div className='test-title'>{testCase.title}</div>
+          {error && <aha-alert type='danger'>{error}</aha-alert>}
           {comment && <div className='text-gray'>{comment.comment}</div>}
         </div>
       </div>
@@ -85,7 +96,12 @@ const TestRow: React.FC<RowProps> = ({
           </>
         )}
         {canDelete && (
-          <aha-button size='mini' kind='icon' onClick={unlink}>
+          <aha-button
+            size='mini'
+            kind='icon'
+            onClick={unlink}
+            disabled={unlinking ? true : null}
+          >
             <aha-icon icon='fa-regular fa-trash-can' />
           </aha-button>
         )}

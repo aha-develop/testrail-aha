@@ -5,6 +5,7 @@ import {
   TestResult,
 } from '../../extension';
 import { ExtensionRecord } from '../extensionRecord';
+import { syncCaseReferences } from '../sync/syncCaseReferences';
 import {
   fieldName,
   indexKeyForRecord,
@@ -33,9 +34,12 @@ export const linkRecords: (
   if (!indexField) indexField = [];
 
   const existingIds = new Set(indexField);
-  ids = ids.filter(id => !existingIds.has(id));
+  ids = [...new Set(ids)].filter(id => !existingIds.has(id));
 
   if (ids.length === 0) return;
+
+  // Keep the link action retryable if TestRail rejects the reference update.
+  if (key === 'caseIds') await syncCaseReferences(record, ids, 'add');
 
   indexField = indexField.concat(ids);
   await record.setExtensionField(IDENTIFIER, key, indexField);
@@ -46,13 +50,13 @@ export const unlinkRecord: (
   id: number,
   key: string
 ) => Promise<void> = async (record, id, key) => {
-  let ids = (await record.getExtensionField(IDENTIFIER, key)) as
-    | number[]
-    | undefined;
+  const ids = (await record.getExtensionField<number[]>(IDENTIFIER, key)) ?? [];
 
   const newIds = ids.filter(existingId => id !== existingId);
 
   if (newIds.length === ids.length) return;
+
+  if (key === 'caseIds') await syncCaseReferences(record, [id], 'remove');
 
   await record.setExtensionField(IDENTIFIER, key, newIds);
 };

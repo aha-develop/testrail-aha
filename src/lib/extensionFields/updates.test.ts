@@ -1,8 +1,10 @@
 import { IDENTIFIER, TestCase, TestResult, TestRun } from '../../extension';
 import { ExtensionRecord } from '../extensionRecord';
 import { getAccountExtensionFieldMap } from './queries';
+import { syncCaseReferences } from '../sync/syncCaseReferences';
 import {
   linkRecord,
+  linkRecords,
   unlinkRecord,
   saveRecords,
   saveNewRuns,
@@ -35,6 +37,66 @@ jest.mock('./queries', () => ({
 }));
 
 const mockGetExtensionMap = getAccountExtensionFieldMap as jest.Mock;
+
+jest.mock('../sync/syncCaseReferences', () => ({ syncCaseReferences: jest.fn() }));
+const mockSyncReferences = syncCaseReferences as jest.Mock;
+
+describe('case link reference syncing', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockSyncReferences.mockReset().mockResolvedValue(undefined);
+    mockGetExtensionField.mockResolvedValue([123]);
+  });
+
+  it('syncs only new cases, deduplicating the requested IDs', async () => {
+    await linkRecords(mockRecord, [123, 456, 456], 'caseIds');
+    expect(mockSyncReferences).toHaveBeenCalledWith(mockRecord, [456], 'add');
+    expect(mockSetExtensionField).toHaveBeenCalledWith(IDENTIFIER, 'caseIds', [123, 456]);
+    expect(mockSyncReferences.mock.invocationCallOrder[0]).toBeLessThan(mockSetExtensionField.mock.invocationCallOrder[0]);
+  });
+
+  it('does no work when the case is already linked', async () => {
+    await linkRecord(mockRecord, 123, 'caseIds');
+    expect(mockSyncReferences).not.toHaveBeenCalled();
+    expect(mockSetExtensionField).not.toHaveBeenCalled();
+  });
+
+  it('syncs the removal before unlinking', async () => {
+    await unlinkRecord(mockRecord, 123, 'caseIds');
+    expect(mockSyncReferences).toHaveBeenCalledWith(mockRecord, [123], 'remove');
+    expect(mockSetExtensionField).toHaveBeenCalledWith(IDENTIFIER, 'caseIds', []);
+    expect(mockSyncReferences.mock.invocationCallOrder[0]).toBeLessThan(mockSetExtensionField.mock.invocationCallOrder[0]);
+  });
+
+  it.each([undefined, [], [456]])('does nothing for an absent case link: %p', async ids => {
+    mockGetExtensionField.mockResolvedValue(ids);
+    await unlinkRecord(mockRecord, 123, 'caseIds');
+    expect(mockSyncReferences).not.toHaveBeenCalled();
+    expect(mockSetExtensionField).not.toHaveBeenCalled();
+  });
+
+  it.each(['runIds', 'testIds'])('never syncs references for %s', async key => {
+    await linkRecord(mockRecord, 456, key);
+    await unlinkRecord(mockRecord, 123, key);
+    expect(mockSyncReferences).not.toHaveBeenCalled();
+  });
+
+  it('leaves a failed link retryable', async () => {
+    mockSyncReferences.mockRejectedValueOnce(new Error('TestRail unavailable'));
+    await expect(linkRecord(mockRecord, 456, 'caseIds')).rejects.toThrow('TestRail unavailable');
+    expect(mockSetExtensionField).not.toHaveBeenCalled();
+    await linkRecord(mockRecord, 456, 'caseIds');
+    expect(mockSetExtensionField).toHaveBeenCalledWith(IDENTIFIER, 'caseIds', [123, 456]);
+  });
+
+  it('leaves a failed unlink retryable', async () => {
+    mockSyncReferences.mockRejectedValueOnce(new Error('TestRail unavailable'));
+    await expect(unlinkRecord(mockRecord, 123, 'caseIds')).rejects.toThrow('TestRail unavailable');
+    expect(mockSetExtensionField).not.toHaveBeenCalled();
+    await unlinkRecord(mockRecord, 123, 'caseIds');
+    expect(mockSetExtensionField).toHaveBeenCalledWith(IDENTIFIER, 'caseIds', []);
+  });
+});
 
 describe('linkRecord', () => {
   beforeEach(() => {

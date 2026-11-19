@@ -21,6 +21,7 @@ const LinkTestCase: React.FC<Props> = ({
 
   const [selectedCaseIds, setSelectedCaseIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     const modal = modalRef.current;
@@ -33,15 +34,19 @@ const LinkTestCase: React.FC<Props> = ({
 
   const submit = useCallback(async () => {
     setSaving(() => true);
-
-    await linkRecords(
-      record,
-      selectedCaseIds.map(id => Number.parseInt(id)),
-      'caseIds'
-    );
-
-    setSaving(() => false);
-    onClose();
+    setError(null);
+    try {
+      await linkRecords(
+        record,
+        selectedCaseIds.map(id => Number.parseInt(id)),
+        'caseIds'
+      );
+      onClose();
+    } catch (error) {
+      setError(error.message || 'Could not link test cases. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   }, [record, selectedCaseIds, onClose]);
 
   const updateSelectedCaseIds: (
@@ -74,6 +79,9 @@ const LinkTestCase: React.FC<Props> = ({
         Link test case
       </aha-modal-header>
       <aha-modal-body>
+        {error && (
+          <aha-alert className='mb-5' type='danger'>{error}</aha-alert>
+        )}
         {syncData && !syncData.lastSync && (
           <aha-alert class='mb-5' type='warning' dismissable>
             <div slot='heading'>We haven't fully synced with TestRail yet.</div>

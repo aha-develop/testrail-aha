@@ -31,6 +31,7 @@ const LinkTest: React.FC<Props> = ({
 }) => {
   const modalRef = useRef(null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectId, setProjectId] = useState<number>(null);
@@ -75,21 +76,24 @@ const LinkTest: React.FC<Props> = ({
     if (!selected.length) return;
 
     setSaving(() => true);
-
-    await linkRecords(
-      record,
-      selected.map(({ caseId }) => caseId),
-      'caseIds'
-    );
-
-    await linkRecords(
-      record,
-      selected.map(({ testId }) => testId),
-      'testIds'
-    );
-
-    setSaving(() => false);
-    onClose();
+    setError(null);
+    try {
+      await linkRecords(
+        record,
+        selected.map(({ caseId }) => caseId),
+        'caseIds'
+      );
+      await linkRecords(
+        record,
+        selected.map(({ testId }) => testId),
+        'testIds'
+      );
+      onClose();
+    } catch (error) {
+      setError(error.message || 'Could not link tests. Please try again.');
+    } finally {
+      setSaving(false);
+    }
   }, [record, onClose, selected]);
 
   const setProject = useCallback(
@@ -140,6 +144,9 @@ const LinkTest: React.FC<Props> = ({
     <aha-modal ref={modalRef} open position='h-center' size='medium'>
       <aha-modal-header modalTitle='Link test'>Link test</aha-modal-header>
       <aha-modal-body>
+        {error && (
+          <aha-alert className='mb-5' type='danger'>{error}</aha-alert>
+        )}
         {syncData && !syncData.lastSync && (
           <aha-alert class='mb-5' type='warning' dismissable>
             <div slot='heading'>We haven't fully synced with TestRail yet.</div>

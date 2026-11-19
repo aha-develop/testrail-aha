@@ -252,7 +252,7 @@ describe('sync API cooldown', () => {
     );
   });
 
-  it('waits for the embedded deadline when a bulk-written result is visible before retryAt', async () => {
+  it('waits for the embedded deadline when the result is visible before retryAt', async () => {
     const originalFetch = global.fetch;
     const log = jest.spyOn(console, 'log').mockImplementation(() => {});
     const error = jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -260,13 +260,16 @@ describe('sync API cooldown', () => {
     const requestTimes: number[] = [];
     (aha as any).settings = { get: () => 'test' };
 
-    aha.account.setExtensionFields = jest.fn(async (_identifier, values) => {
-      fields.sync = values.sync;
-      // Bulk transport need not guarantee that both fields become readable
-      // together. Model the original result-first race explicitly.
-      await new Promise(resolve => setTimeout(resolve, 10000));
-      fields.retryAt = values.retryAt;
-    });
+    aha.account.setExtensionField = jest.fn(
+      async (_identifier, key, value) => {
+        // The concurrent writes need not become readable together. Model the
+        // result arriving before the shared cooldown explicitly.
+        if (key === 'retryAt') {
+          await new Promise(resolve => setTimeout(resolve, 10000));
+        }
+        fields[key] = value;
+      }
+    );
 
     global.fetch = jest.fn(async () => {
       requestTimes.push(Date.now());
@@ -304,7 +307,7 @@ describe('sync API cooldown', () => {
       expect(await pending).toEqual(success);
 
       await Promise.all(serverJobs);
-      expect(aha.account.setExtensionFields).toHaveBeenCalledTimes(1);
+      expect(aha.account.setExtensionField).toHaveBeenCalledTimes(2);
     } finally {
       global.fetch = originalFetch;
       log.mockRestore();

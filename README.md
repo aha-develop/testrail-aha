@@ -9,6 +9,7 @@ It provides these contributions:
 - `TestRail connection page` - Allows for finer-grained control of TestRail data sync, such as loading new projects and suites. Under the 'Work' menu item.
 - `Sync events` - The 10 syncing events are called by the connection page and auto-sync to fetch data from TestRail
 - `Create Test Case event` - Calls the TestRail API to create new test cases
+- `Sync Test Case Reference event` - Adds or removes an Aha! record reference on a TestRail test case when enabled.
 
 ## Demo
 
@@ -45,6 +46,10 @@ It provides these contributions:
    - Enter the TestRail email address of the user that generated the key in step 2 into the 'TestRail API Username' field.
 
    - (Optional) Adjust the automatic sync delay field. This controls how often auto-sync will run when you visit the tests tab. It defaults to 1 hour (3600 seconds) since the last successful sync.
+
+   - (Optional) Enable **Sync Aha! references to test cases** (off by default). When a case is linked, the Aha! record's reference is appended to the case's TestRail References field if absent. Unlinking removes that exact reference, including a reference that was originally entered manually. Other references are preserved. This also applies to cases linked through an individual test or created in Aha!, but does not update test runs. The API user needs permission to edit test cases.
+
+     This setting affects future link/unlink actions only; toggling it does not backfill or clean up existing references. Reference updates must succeed before the Aha! link changes. If an update fails, the dialog or row shows the error and the action can be retried. A create dialog retains a successfully created case for link retries. In a batch, earlier reference updates may have succeeded before a later failure; retry the batch to finish linking. Reference updates read the latest value on each attempt, but concurrent edits from another user or integration can still overwrite one another because TestRail replaces the entire References field.
 
 4. Run initial sync.
    - In Aha!, go to Work -> TestRail connection. Click 'Sync all' next to 'Full TestRail re-sync'.

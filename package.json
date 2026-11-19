@@ -32,6 +32,13 @@
         }
       },
       "events": {
+        "syncCaseReference": {
+          "title": "Sync Test Case Reference",
+          "entryPoint": "src/events/syncCaseReference.ts",
+          "handles": [
+            "aha-develop.testrail.syncCaseReference"
+          ]
+        },
         "createTestCase": {
           "title": "Create Test Case",
           "entryPoint": "src/events/createTestCase.ts",
@@ -111,6 +118,15 @@
         }
       },
       "settings": {
+        "syncCaseReferences": {
+          "title": "Sync Aha! references to test cases",
+          "type": "boolean",
+          "description": "Add the Aha! record reference to linked TestRail test cases and remove it when unlinked. Applies to future link/unlink actions only. Requires permission to edit test cases in TestRail.",
+          "scope": [
+            "account"
+          ],
+          "default": false
+        },
         "domain": {
           "title": "TestRail Subdomain",
           "type": "string",

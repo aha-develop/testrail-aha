@@ -21,15 +21,12 @@ type Props = {
 
 type CreateProps = {
   domain: string;
-  record: ExtensionRecord;
   title: string;
   precondition: string;
   steps: string;
   results: string;
   sectionId: string;
   projectId: string;
-  setSaving: (saving: boolean) => void;
-  setError: (error: boolean) => void;
 };
 
 const sectionOptions: (
@@ -145,8 +142,7 @@ const findChild: (node: TreeNode, value: string) => boolean = (node, value) => {
   return false;
 };
 
-const createTestCase: (props: CreateProps) => Promise<boolean> = async ({
-  record,
+const createTestCase: (props: CreateProps) => Promise<TestCase> = async ({
   domain,
   title,
   precondition,
@@ -154,14 +150,9 @@ const createTestCase: (props: CreateProps) => Promise<boolean> = async ({
   results,
   sectionId,
   projectId,
-  setSaving,
-  setError,
 }) => {
   const sectionIdNum = Number.parseInt(sectionId);
   const projectIdNum = Number.parseInt(projectId);
-
-  setSaving(true);
-  setError(false);
 
   const eventKey = `createTestCase-${Date.now()}`;
 
@@ -182,21 +173,10 @@ const createTestCase: (props: CreateProps) => Promise<boolean> = async ({
   const result = await waitForLambda<APIResult>({ lambdaFunc, args, eventKey });
 
   if (!result || result.error) {
-    setSaving(false);
-    setError(true);
-
-    return false;
+    throw new Error(result?.message || 'Could not create test case');
   }
 
-  const testCase = result.result as TestCase;
-
-  await saveRecords([testCase]);
-
-  await linkRecord(record, testCase.id, 'caseIds');
-
-  setSaving(false);
-
-  return true;
+  return result.result as TestCase;
 };
 
 const CreateTestCase: React.FC<Props> = ({
@@ -210,6 +190,7 @@ const CreateTestCase: React.FC<Props> = ({
   const preconditionRef = useRef(null);
   const stepsRef = useRef(null);
   const resultsRef = useRef(null);
+  const createdCaseRef = useRef<TestCase | null>(null);
 
   const [title, setTitle] = useState<string>('');
   const [precondition, setPrecondition] = useState<string>('');
@@ -218,7 +199,7 @@ const CreateTestCase: React.FC<Props> = ({
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [syncing, setSyncing] = useState(null);
   const [syncingSections, setSyncingSections] = useState(false);
@@ -238,20 +219,32 @@ const CreateTestCase: React.FC<Props> = ({
   };
 
   const submit = async () => {
-    const result = await createTestCase({
-      domain,
-      record,
-      title: titleRef.current.value,
-      precondition: preconditionRef.current.value,
-      steps: stepsRef.current.value,
-      results: resultsRef.current.value,
-      sectionId: sectionIdRef.current,
-      projectId: projectIdRef.current,
-      setSaving,
-      setError,
-    });
-
-    if (result) onClose();
+    setSaving(true);
+    setError(null);
+    try {
+      // Retain a successful create before attempting the separate link, so a
+      // reference-sync failure can be retried without creating another case.
+      if (!createdCaseRef.current) {
+        createdCaseRef.current = await createTestCase({
+          domain,
+          title: titleRef.current.value,
+          precondition: preconditionRef.current.value,
+          steps: stepsRef.current.value,
+          results: resultsRef.current.value,
+          sectionId: sectionIdRef.current,
+          projectId: projectIdRef.current,
+        });
+      }
+      await saveRecords([createdCaseRef.current]);
+      await linkRecord(record, createdCaseRef.current.id, 'caseIds');
+      onClose();
+    } catch (error) {
+      setError(
+        error.message || 'Could not create and link test case. Please try again.'
+      );
+    } finally {
+      setSaving(false);
+    }
   };
 
   useEffect(() => {
@@ -311,12 +304,20 @@ const CreateTestCase: React.FC<Props> = ({
         )}
         {error && (
           <aha-alert class='mb-5' type='danger' dismissable>
-            <div slot='heading'>Could not create test case</div>
-            Please refresh the page and try again. If this problem continues,
-            please contact <a href='mailto:support@aha.io'>support@aha.io</a>.
+            <div slot='heading'>Could not complete test case link</div>
+            {error}
           </aha-alert>
         )}
-        <div class='create-form'>
+        {createdCaseRef.current && (
+          <aha-alert className='mb-5' type='info'>
+            Test case C{createdCaseRef.current.id} was created. Retry linking
+            it below, or close this dialog and link the existing case later.
+          </aha-alert>
+        )}
+        <div
+          className='create-form'
+          style={{ display: createdCaseRef.current ? 'none' : undefined }}
+        >
           <div class='form-field'>
             <div class='field-label'>
               Name<span class='label-required'>*</span>
@@ -353,7 +354,10 @@ const CreateTestCase: React.FC<Props> = ({
             />
           </div>
         </div>
-        <div className='search-form'>
+        <div
+          className='search-form'
+          style={{ display: createdCaseRef.current ? 'none' : undefined }}
+        >
           <SearchByName
             tree={sectionTree}
             selected={[sectionId]}
@@ -377,7 +381,9 @@ const CreateTestCase: React.FC<Props> = ({
           }
           onClick={submit}
         >
-          {saving ? 'Creating...' : 'Create and link'}
+          {createdCaseRef.current
+            ? saving ? 'Linking...' : 'Retry link'
+            : saving ? 'Creating...' : 'Create and link'}
         </aha-button>
       </aha-modal-footer>
     </aha-modal>
