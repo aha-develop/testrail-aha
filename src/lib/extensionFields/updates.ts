@@ -6,7 +6,10 @@ import {
   Test,
 } from '../../extension';
 import { ExtensionRecord } from '../extensionRecord';
-import { updateReference } from '../sync/updateReference';
+import {
+  ReferenceUpdateError,
+  updateReferences,
+} from '../sync/updateReferences';
 import {
   fieldName,
   indexKeyForRecord,
@@ -47,9 +50,22 @@ export const linkRecords: (
 
   if (ids.length === 0) return;
 
-  // Keep the link action retryable if TestRail rejects the reference update.
+  // Save confirmed successes before reporting failed reference updates.
   if (key === 'caseIds' && !options.referenceHandled) {
-    await updateReference(record, ids, 'add');
+    try {
+      await updateReferences(record, ids, 'add');
+    } catch (error) {
+      if (
+        error instanceof ReferenceUpdateError && error.successfulCaseIds.length
+      ) {
+        await record.setExtensionField(
+          IDENTIFIER,
+          key,
+          indexField.concat(error.successfulCaseIds)
+        );
+      }
+      throw error;
+    }
   }
 
   indexField = indexField.concat(ids);
@@ -67,7 +83,7 @@ export const unlinkRecord: (
 
   if (newIds.length === ids.length) return;
 
-  if (key === 'caseIds') await updateReference(record, [id], 'remove');
+  if (key === 'caseIds') await updateReferences(record, [id], 'remove');
 
   await record.setExtensionField(IDENTIFIER, key, newIds);
 };

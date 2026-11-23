@@ -1,7 +1,7 @@
 import { IDENTIFIER, TestCase, TestResult, TestRun } from '../../extension';
 import { ExtensionRecord } from '../extensionRecord';
 import { getAccountExtensionFieldMap } from './queries';
-import { updateReference } from '../sync/updateReference';
+import { ReferenceUpdateError, updateReferences } from '../sync/updateReferences';
 import {
   linkRecord,
   linkRecords,
@@ -38,10 +38,11 @@ jest.mock('./queries', () => ({
 
 const mockGetExtensionMap = getAccountExtensionFieldMap as jest.Mock;
 
-jest.mock('../sync/updateReference', () => ({
-  updateReference: jest.fn(),
+jest.mock('../sync/updateReferences', () => ({
+  ...jest.requireActual('../sync/updateReferences'),
+  updateReferences: jest.fn(),
 }));
-const mockSyncReferences = updateReference as jest.Mock;
+const mockSyncReferences = updateReferences as jest.Mock;
 
 describe('case link reference syncing', () => {
   beforeEach(() => {
@@ -143,6 +144,46 @@ describe('case link reference syncing', () => {
       'caseIds',
       []
     );
+  });
+
+  it('awaits saving successful links before raising the reference error, then retries only failures', async () => {
+    let linkedIds = [123];
+    mockGetExtensionField.mockImplementation(async () => linkedIds);
+    let finishSave: () => void;
+    mockSetExtensionField.mockImplementationOnce(async (_identifier, _key, ids) => {
+      await new Promise<void>(resolve => { finishSave = resolve; });
+      linkedIds = ids;
+    });
+    const error = new ReferenceUpdateError('C789: Permission denied', [456]);
+    mockSyncReferences.mockRejectedValueOnce(error);
+
+    let settled = false;
+    const pending = expect(linkRecords(mockRecord, [123, 456, 789, 456], 'caseIds'))
+      .rejects.toBe(error)
+      .then(() => {
+        settled = true;
+      });
+    // Allow the initial read and failed reference sync to reach the pending save.
+    await new Promise(resolve => setImmediate(resolve));
+    expect(mockSetExtensionField).toHaveBeenCalledWith(
+      IDENTIFIER, 'caseIds', [123, 456]
+    );
+    expect(settled).toBe(false);
+
+    finishSave();
+    await pending;
+    await linkRecords(mockRecord, [123, 456, 789], 'caseIds');
+    expect(mockSyncReferences).toHaveBeenLastCalledWith(mockRecord, [789], 'add');
+    expect(mockSetExtensionField).toHaveBeenLastCalledWith(
+      IDENTIFIER, 'caseIds', [123, 456, 789]
+    );
+  });
+
+  it('does not save links when every reference update fails', async () => {
+    const error = new ReferenceUpdateError('Permission denied', []);
+    mockSyncReferences.mockRejectedValueOnce(error);
+    await expect(linkRecords(mockRecord, [456, 789], 'caseIds')).rejects.toBe(error);
+    expect(mockSetExtensionField).not.toHaveBeenCalled();
   });
 });
 

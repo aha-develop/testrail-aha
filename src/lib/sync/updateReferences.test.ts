@@ -1,11 +1,11 @@
 import { IDENTIFIER } from '../../extension';
 import { ExtensionRecord } from '../extensionRecord';
-import { waitForLambda } from './interface';
-import { updateReference } from './updateReference';
+import { waitForLambdaBatch } from './interface';
+import { updateReferences } from './updateReferences';
 
-jest.mock('./interface', () => ({ waitForLambda: jest.fn() }));
+jest.mock('./interface', () => ({ waitForLambdaBatch: jest.fn() }));
 
-const mockWait = waitForLambda as jest.Mock;
+const mockWait = waitForLambdaBatch as jest.Mock;
 const getSetting = jest.fn();
 const triggerServer = jest.fn();
 const loadAttributes = jest.fn();
@@ -15,7 +15,9 @@ beforeEach(() => {
   jest.resetAllMocks();
   (global as any).aha = { settings: { get: getSetting }, triggerServer };
   getSetting.mockReturnValue(true);
-  mockWait.mockResolvedValue({ error: false });
+  mockWait.mockImplementation(async ({ eventKeys }) =>
+    Object.fromEntries(eventKeys.map(key => [key, { error: false }]))
+  );
   record = {
     id: '100',
     typename: 'Feature',
@@ -28,14 +30,14 @@ it.each([false, undefined])(
   'does not load or dispatch when setting is %p',
   async setting => {
     getSetting.mockReturnValue(setting);
-    await updateReference(record, [12], 'add');
+    await updateReferences(record, [12], 'add');
     expect(loadAttributes).not.toHaveBeenCalled();
     expect(mockWait).not.toHaveBeenCalled();
   }
 );
 
 it('does nothing for an empty batch', async () => {
-  await updateReference(record, [], 'add');
+  await updateReferences(record, [], 'add');
   expect(getSetting).not.toHaveBeenCalled();
   expect(mockWait).not.toHaveBeenCalled();
 });
@@ -47,35 +49,36 @@ it.each(['Feature', 'Requirement', 'Epic', 'Iteration'])(
     loadAttributes.mockImplementation(async () => {
       Object.assign(record, { referenceNum: 'ABC-1' });
     });
-    await updateReference(record, [12, 12, 13], 'add');
+    await updateReferences(record, [12, 12, 13], 'add');
     expect(loadAttributes).toHaveBeenCalledWith('referenceNum');
-    expect(mockWait).toHaveBeenCalledTimes(2);
-    expect(mockWait).toHaveBeenNthCalledWith(
-      1,
-      expect.objectContaining({
-        args: { caseId: 12, reference: 'ABC-1', operation: 'add' },
-      })
-    );
-    expect(mockWait).toHaveBeenNthCalledWith(
-      2,
-      expect.objectContaining({
-        args: { caseId: 13, reference: 'ABC-1', operation: 'add' },
-      })
-    );
-    const { lambdaFunc, args, eventKey } = mockWait.mock.calls[0][0];
-    await lambdaFunc({ ...args, eventKey });
+    expect(mockWait).toHaveBeenCalledTimes(1);
+    const { lambdaFunc, argsForKeys, eventKeys } = mockWait.mock.calls[0][0];
+    expect(eventKeys).toHaveLength(2);
+    expect(eventKeys[0]).not.toBe(eventKeys[1]);
+    expect(eventKeys.map(key => argsForKeys[key])).toEqual([
+      { caseId: 12, reference: 'ABC-1', operation: 'add' },
+      { caseId: 13, reference: 'ABC-1', operation: 'add' },
+    ]);
+    const args = { ...argsForKeys[eventKeys[0]], eventKey: eventKeys[0] };
+    await lambdaFunc(args);
     expect(triggerServer).toHaveBeenCalledWith(
       `${IDENTIFIER}.updateReference`,
-      { ...args, eventKey }
+      args
     );
   }
 );
 
 it('sends removals through the same handler', async () => {
-  await updateReference(record, [12], 'remove');
+  await updateReferences(record, [12], 'remove');
   expect(mockWait).toHaveBeenCalledWith(
     expect.objectContaining({
-      args: { caseId: 12, reference: 'ABC-1', operation: 'remove' },
+      argsForKeys: {
+        [mockWait.mock.calls[0][0].eventKeys[0]]: {
+          caseId: 12,
+          reference: 'ABC-1',
+          operation: 'remove',
+        },
+      },
     })
   );
 });
@@ -83,34 +86,72 @@ it('sends removals through the same handler', async () => {
 it('gives repeated requests independent result fields', async () => {
   jest.spyOn(Date, 'now').mockReturnValue(123);
   try {
-    await updateReference(record, [12], 'add');
-    await updateReference(record, [12], 'remove');
-    expect(mockWait.mock.calls[0][0].eventKey).not.toBe(
-      mockWait.mock.calls[1][0].eventKey
+    await updateReferences(record, [12], 'add');
+    await updateReferences(record, [12], 'remove');
+    expect(mockWait.mock.calls[0][0].eventKeys[0]).not.toBe(
+      mockWait.mock.calls[1][0].eventKeys[0]
     );
   } finally {
     jest.restoreAllMocks();
   }
 });
 
-it('surfaces errors and stops the batch', async () => {
-  mockWait.mockResolvedValueOnce({ error: true, message: 'Permission denied' });
-  await expect(updateReference(record, [12, 13], 'add')).rejects.toThrow(
-    'Permission denied'
+it('collects errors while retaining successful cases from later batches', async () => {
+  mockWait.mockImplementationOnce(async ({ eventKeys }) =>
+    Object.fromEntries(
+      eventKeys.map(key => [key, { error: true, message: 'Permission denied' }])
+    )
   );
-  expect(mockWait).toHaveBeenCalledTimes(1);
+  const ids = Array.from({ length: 11 }, (_, index) => index + 1);
+  await expect(updateReferences(record, ids, 'add')).rejects.toMatchObject({
+    message: expect.stringContaining('Permission denied'),
+    successfulCaseIds: [6, 7, 8, 9, 10, 11],
+  });
+  expect(mockWait).toHaveBeenCalledTimes(3);
+});
+
+it('retains successes within a batch and across earlier batches', async () => {
+  mockWait.mockImplementation(async ({ eventKeys, argsForKeys }) =>
+    Object.fromEntries(
+      eventKeys.map(key => [
+        key,
+        argsForKeys[key].caseId === 7
+          ? { error: true, message: 'Permission denied' }
+          : { error: false },
+      ])
+    )
+  );
+  const ids = Array.from({ length: 11 }, (_, index) => index + 1);
+  await expect(updateReferences(record, ids, 'add')).rejects.toMatchObject({
+    message: 'Could not sync reference for test case C7: Permission denied',
+    successfulCaseIds: ids.filter(id => id !== 7),
+  });
+});
+
+it('retains earlier successes when a later batch throws', async () => {
+  mockWait
+    .mockImplementationOnce(async ({ eventKeys }) =>
+      Object.fromEntries(eventKeys.map(key => [key, { error: false }]))
+    )
+    .mockRejectedValueOnce(new Error('Connection lost'));
+  await expect(updateReferences(record, [1, 2, 3, 4, 5, 6], 'add'))
+    .rejects.toMatchObject({
+      name: 'ReferenceUpdateError',
+      message: 'Connection lost',
+      successfulCaseIds: [1, 2, 3, 4, 5],
+    });
 });
 
 it('rejects a missing result', async () => {
-  mockWait.mockResolvedValueOnce(undefined);
-  await expect(updateReference(record, [12], 'add')).rejects.toThrow(
+  mockWait.mockResolvedValueOnce({});
+  await expect(updateReferences(record, [12], 'add')).rejects.toThrow(
     'Could not sync reference'
   );
 });
 
 it('does not dispatch an empty Aha! reference', async () => {
   Object.assign(record, { referenceNum: '' });
-  await expect(updateReference(record, [12], 'add')).rejects.toThrow(
+  await expect(updateReferences(record, [12], 'add')).rejects.toThrow(
     'Could not load'
   );
   expect(mockWait).not.toHaveBeenCalled();

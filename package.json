@@ -152,7 +152,7 @@
           ]
         },
         "updateReferences": {
-          "title": "Sync Aha! references",
+          "title": "Sync Aha! References to TestRail",
           "type": "boolean",
           "description": "Add the Aha! reference number to the references field when linking/creating test cases",
           "scope": [
@@ -161,14 +161,14 @@
           "default": false
         },
         "showLatestResult": {
-          "title": "Show latest result",
+          "title": "Show Latest Result",
           "type": "boolean",
           "description": "Linked test cases without linked tests will automatically show the latest result for that case",
           "scope": [
             "account"
           ],
           "default": false
-        },
+        }
       }
     }
   },

@@ -7,11 +7,11 @@ import {
   updateLatestTestedCaseIndexes,
 } from './latestTestedCases';
 import { saveRecords } from './updates';
-import { updateReference } from '../sync/updateReference';
+import { updateReferences } from '../sync/updateReferences';
 
 jest.mock('./queryExtensionFields', () => ({ default: jest.fn() }));
-jest.mock('../sync/updateReference', () => ({
-  updateReference: jest.fn(),
+jest.mock('../sync/updateReferences', () => ({
+  updateReferences: jest.fn(),
 }));
 
 let fields: Record<string, any>;

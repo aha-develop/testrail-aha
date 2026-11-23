@@ -86,7 +86,8 @@ const callLambdaBatch = async ({
 };
 
 const waitForResults = async (
-  eventKeys: string[]
+  eventKeys: string[],
+  waitForAll = false
 ): Promise<LambdaResultMap> => {
   const initialTime = Date.now();
   const results: LambdaResultMap = {};
@@ -108,19 +109,21 @@ const waitForResults = async (
 
         if (result.error && !isRateLimited(result)) {
           error = result.message;
-          break;
+          if (!waitForAll) break;
         }
       }
     }
 
-    // Only stop when we have a non-timeout error, or all requests resolved.
-    if (error || eventKeys.every(key => results[key])) break;
+    // Mutation batches keep polling in-flight operations even after an error.
+    if ((!waitForAll && error) || eventKeys.every(key => results[key])) break;
 
     await sleep(INTERVAL_TIME);
   }
 
+  const timeoutMessage =
+    'Timeout waiting for lambda to complete - please try again';
   if (!error && eventKeys.some(key => !results[key])) {
-    error = 'Timeout waiting for lambda to complete - please try again';
+    error = timeoutMessage;
   }
 
   for (const key of eventKeys) {
@@ -129,7 +132,12 @@ const waitForResults = async (
 
   if (error) {
     return Object.fromEntries(
-      eventKeys.map(key => [key, { error: true, message: error }])
+      eventKeys.map(key => [
+        key,
+        waitForAll && results[key]
+          ? results[key]
+          : { error: true, message: waitForAll ? timeoutMessage : error },
+      ])
     );
   }
 
@@ -140,7 +148,8 @@ const executeLambdaBatch = async ({
   eventKeys,
   lambdaFunc,
   argsForKeys,
-}: IndexCallProps): Promise<LambdaResultMap> => {
+  waitForAll = false,
+}: IndexCallProps & { waitForAll?: boolean }): Promise<LambdaResultMap> => {
   const results: LambdaResultMap = {};
   let pendingKeys = eventKeys;
   let minimumRetryAt = 0;
@@ -153,10 +162,11 @@ const executeLambdaBatch = async ({
       minimumRetryAt,
     });
 
-    const attempt = await waitForResults(pendingKeys);
+    const attempt = await waitForResults(pendingKeys, waitForAll);
     Object.assign(results, attempt);
 
     if (
+      !waitForAll &&
       Object.values(attempt).some(
         result => result.error && !isRateLimited(result)
       )
@@ -194,6 +204,20 @@ export const waitForLambda: <T extends LambdaResult>(
   });
 
   return results[eventKey] as T;
+};
+
+// Dispatch a group with shared polling and selective rate-limit retries. Wait for
+// all dispatched operations before reporting an error (subject to the poll timeout).
+export const waitForLambdaBatch = async <T extends LambdaResult>(
+  props: IndexCallProps
+): Promise<{ [key: string]: T }> => {
+  for (const eventKey of props.eventKeys) {
+    await aha.account.clearExtensionField(IDENTIFIER, eventKey);
+  }
+
+  return (await executeLambdaBatch({ ...props, waitForAll: true })) as {
+    [key: string]: T;
+  };
 };
 
 // As above, but makes multiple calls to the lambda to fetch pages until there

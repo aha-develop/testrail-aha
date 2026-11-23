@@ -1,5 +1,9 @@
 import { TIMEOUT_MESSAGE, formatTimeoutMessage, fetchTestRail } from '../api';
 import { getAccountExtensionFieldMap } from '../extensionFields/queries';
+import { ExtensionRecord } from '../extensionRecord';
+import { updateReferences } from './updateReferences';
+import { linkRecords } from '../extensionFields/updates';
+import { IDENTIFIER } from '../../extension';
 import {
   waitForLambda,
   waitForPagedLambda,
@@ -109,6 +113,175 @@ describe('sync API cooldown', () => {
   afterEach(() => {
     jest.useRealTimers();
     jest.clearAllMocks();
+  });
+
+  describe('reference update batches', () => {
+    const record = {
+      id: '100',
+      typename: 'Feature',
+      referenceNum: 'ABC-1',
+      loadAttributes: async () => {},
+    } as unknown as ExtensionRecord;
+    const ids = Array.from({ length: 23 }, (_, index) => index + 1);
+    let triggerServer: jest.Mock;
+
+    beforeEach(() => {
+      triggerServer = jest.fn(async (_event, { eventKey }) => {
+        fields[eventKey] = success;
+      });
+      Object.assign(aha, {
+        settings: { get: () => true },
+        triggerServer,
+      });
+    });
+
+    it('dispatches at most five cases per batch and polls their results together', async () => {
+      const pending = updateReferences(record, [...ids, 1], 'add');
+
+      await jest.advanceTimersByTimeAsync(0);
+      expect(triggerServer).toHaveBeenCalledTimes(5);
+      expect(cooldownReads()).toBe(1);
+
+      await jest.advanceTimersByTimeAsync(3000);
+      expect(triggerServer).toHaveBeenCalledTimes(10);
+      expect(getAccountExtensionFieldMap).toHaveBeenCalledWith(
+        triggerServer.mock.calls.slice(0, 5).map(([, args]) => args.eventKey)
+      );
+
+      await jest.advanceTimersByTimeAsync(3000);
+      expect(triggerServer).toHaveBeenCalledTimes(15);
+
+      await jest.runAllTimersAsync();
+      await pending;
+      expect(cooldownReads()).toBe(5);
+      expect(triggerServer.mock.calls.map(([, args]) => args.caseId)).toEqual(ids);
+      expect(fields).toEqual({});
+    });
+
+    it('links successful cases across batches before reporting errors, including late successes', async () => {
+      triggerServer.mockImplementation(async (_event, { caseId, eventKey }) => {
+        if (caseId === 1) {
+          fields[eventKey] = { error: true, message: 'Permission denied' };
+        } else if (caseId === 2) {
+          setTimeout(() => {
+            fields[eventKey] = success;
+          }, 10000);
+        } else {
+          fields[eventKey] = success;
+        }
+      });
+      const setExtensionField = jest.fn(async () => {});
+      const linkRecord = {
+        ...record,
+        getExtensionField: async () => [100],
+        setExtensionField,
+      } as unknown as ExtensionRecord;
+      let settled = false;
+      const pending = expect(linkRecords(linkRecord, ids, 'caseIds'))
+        .rejects.toThrow('Permission denied')
+        .then(() => {
+        settled = true;
+      });
+
+      await jest.advanceTimersByTimeAsync(9999);
+      expect(triggerServer).toHaveBeenCalledTimes(5);
+      expect(settled).toBe(false);
+      // Only the pre-dispatch cleanup has run; pending results remain available.
+      expect(aha.account.clearExtensionField).toHaveBeenCalledTimes(5);
+
+      await jest.runAllTimersAsync();
+      await pending;
+      expect(triggerServer).toHaveBeenCalledTimes(23);
+      expect(setExtensionField).toHaveBeenCalledWith(
+        IDENTIFIER, 'caseIds', [100, ...ids.filter(id => id !== 1)]
+      );
+      expect(fields).toEqual({});
+    });
+
+    it('retries only rate-limited cases before starting the next batch', async () => {
+      triggerServer.mockImplementation(async (_event, { caseId, eventKey }) => {
+        if (caseId === 2 && triggerServer.mock.calls.length === 2) {
+          fields.retryAt = Date.now() + 120000;
+          fields[eventKey] = {
+            error: true,
+            message: formatTimeoutMessage(fields.retryAt),
+          };
+        } else {
+          fields[eventKey] = success;
+        }
+      });
+      const pending = updateReferences(record, ids, 'add');
+
+      await jest.advanceTimersByTimeAsync(119999);
+      expect(triggerServer).toHaveBeenCalledTimes(5);
+
+      await jest.advanceTimersByTimeAsync(1);
+      expect(triggerServer).toHaveBeenCalledTimes(6);
+      expect(triggerServer.mock.calls[5]).toEqual(triggerServer.mock.calls[1]);
+
+      await jest.runAllTimersAsync();
+      await pending;
+      expect(triggerServer).toHaveBeenCalledTimes(24);
+      expect(
+        triggerServer.mock.calls.slice(6).map(([, args]) => args.caseId)
+      ).toEqual(ids.slice(5));
+      expect(Object.keys(fields)).toEqual(['retryAt']);
+    });
+  });
+
+  describe('partial reference results', () => {
+    const record = {
+      id: '100',
+      typename: 'Feature',
+      referenceNum: 'ABC-1',
+      loadAttributes: async () => {},
+    } as unknown as ExtensionRecord;
+
+    it('retains confirmed successes when another case never returns', async () => {
+      Object.assign(aha, {
+        settings: { get: () => true },
+        triggerServer: jest.fn(async (_event, { caseId, eventKey }) => {
+          if (caseId === 1) fields[eventKey] = success;
+        }),
+      });
+      const pending = expect(updateReferences(record, [1, 2], 'add'))
+        .rejects.toMatchObject({
+          successfulCaseIds: [1],
+          message: expect.stringContaining('C2: Timeout waiting for lambda'),
+        });
+      await jest.runAllTimersAsync();
+      await pending;
+      expect(fields).toEqual({});
+    });
+
+    it('retries rate-limited cases even when another case has a permanent error', async () => {
+      const attempts: Record<number, number> = {};
+      Object.assign(aha, {
+        settings: { get: () => true },
+        triggerServer: jest.fn(async (_event, { caseId, eventKey }) => {
+          attempts[caseId] = (attempts[caseId] || 0) + 1;
+          if (caseId === 1) {
+            fields[eventKey] = { error: true, message: 'Permission denied' };
+          } else if (caseId === 2 && attempts[caseId] === 1) {
+            fields[eventKey] = {
+              error: true,
+              message: formatTimeoutMessage(Date.now() + 5000),
+            };
+          } else {
+            fields[eventKey] = success;
+          }
+        }),
+      });
+      const pending = expect(updateReferences(record, [1, 2, 3], 'add'))
+        .rejects.toMatchObject({
+          successfulCaseIds: [2, 3],
+          message: 'Could not sync reference for test case C1: Permission denied',
+        });
+      await jest.runAllTimersAsync();
+      await pending;
+      expect(attempts).toEqual({ 1: 1, 2: 2, 3: 1 });
+      expect(fields).toEqual({});
+    });
   });
 
   describe.each(runners)('$name', ({ run }) => {
