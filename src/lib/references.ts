@@ -1,29 +1,33 @@
 import { IDENTIFIER } from '../extension';
 import { BaseParams, fetchTestRail, logResult } from './api';
 
-export type CaseReferenceOperation = 'add' | 'remove';
+export type ReferenceOperation = 'add' | 'remove';
 
-export type CaseReferenceParams = {
+export type ReferenceParams = {
   caseId: number;
   reference: string;
-  operation: CaseReferenceOperation;
+  operation: ReferenceOperation;
 };
 
-// Each attempt reads fresh references, including retries after a rate limit.
-export const syncCaseReference = async ({
+// The reference field is a comma-separated list of references.
+// There's no way to add/remove a single reference through the API.
+//
+// Because of this, we have to load the current value before updating it,
+// to reduce the chance we overwrite existing values.
+export const updateReference = async ({
   record,
   eventKey,
   caseId,
   reference,
   operation,
-}: BaseParams & CaseReferenceParams): Promise<void> => {
+}: BaseParams & ReferenceParams): Promise<void> => {
   try {
-    if (aha.settings.get(`${IDENTIFIER}.syncCaseReferences`) !== true) {
+    if (aha.settings.get(`${IDENTIFIER}.updateReferences`) !== true) {
       await logResult({
         record,
         eventKey,
         error: false,
-        message: 'Test case reference syncing is disabled',
+        message: 'Reference syncing is disabled',
       });
       return;
     }
@@ -36,7 +40,7 @@ export const syncCaseReference = async ({
       /[,\r\n]/.test(reference) ||
       (operation !== 'add' && operation !== 'remove')
     ) {
-      throw new Error('Invalid test case reference request');
+      throw new Error('Invalid reference update params');
     }
 
     reference = reference.trim();
@@ -45,11 +49,8 @@ export const syncCaseReference = async ({
       eventKey,
       path: `get_case/${caseId}`,
     });
-    if (!current) return; // Preserve the API error, including rate limits.
 
-    if (current.refs !== null && typeof current.refs !== 'string') {
-      throw new Error('TestRail returned invalid test case references');
-    }
+    if (!current) throw new Error('Error retrieving current reference');
 
     const refs: string = current.refs ?? '';
     const tokens = refs.split(',');
@@ -57,10 +58,11 @@ export const syncCaseReference = async ({
     const changed = operation === 'add' ? !present : present;
 
     if (changed) {
-      // Preserve unrelated tokens and their formatting; match whole references.
       const updatedRefs =
         operation === 'add'
-          ? refs.trim() ? `${refs}, ${reference}` : reference
+          ? refs.trim()
+            ? `${refs}, ${reference}`
+            : reference
           : tokens
               .filter(token => token.trim() && token.trim() !== reference)
               .join(',');
@@ -72,7 +74,8 @@ export const syncCaseReference = async ({
         method: 'POST',
         body: { refs: updatedRefs },
       });
-      if (!updated) return;
+
+      if (!updated) throw new Error('Error updating reference');
     }
 
     await logResult({

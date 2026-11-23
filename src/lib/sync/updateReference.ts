@@ -1,19 +1,19 @@
 import { IDENTIFIER } from '../../extension';
 import { ExtensionRecord } from '../extensionRecord';
 import { APIResult } from '../api';
-import type { CaseReferenceOperation } from '../caseReferences';
+import type { ReferenceOperation } from '../references';
 import { waitForLambda } from './interface';
 
 let requestSequence = 0;
 
-export const syncCaseReferences = async (
+export const updateReference = async (
   record: ExtensionRecord,
   caseIds: number[],
-  operation: CaseReferenceOperation
+  operation: ReferenceOperation
 ): Promise<void> => {
   if (
     !caseIds.length ||
-    aha.settings.get(`${IDENTIFIER}.syncCaseReferences`) !== true
+    aha.settings.get(`${IDENTIFIER}.updateReferences`) !== true
   ) {
     return;
   }
@@ -35,11 +35,11 @@ export const syncCaseReferences = async (
   // Bound API traffic and give each operation its own result field, including
   // simultaneous operations on different Aha! records or in different tabs.
   for (const caseId of new Set(caseIds)) {
-    const eventKey = `syncCaseReference-${record.id}-${caseId}-${Date.now()}-${++requestSequence}-${Math.random().toString(36).slice(2)}`;
+    const eventKey = `updateReference-${record.id}-${caseId}-${Date.now()}-${++requestSequence}-${Math.random().toString(36).slice(2)}`;
     const result = await waitForLambda<APIResult>({
       eventKey,
       lambdaFunc: async args => {
-        await aha.triggerServer(`${IDENTIFIER}.syncCaseReference`, args);
+        await aha.triggerServer(`${IDENTIFIER}.updateReference`, args);
       },
       args: { caseId, reference, operation },
     });

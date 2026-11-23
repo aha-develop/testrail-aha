@@ -1,7 +1,7 @@
 import { IDENTIFIER, TestCase, TestResult, TestRun } from '../../extension';
 import { ExtensionRecord } from '../extensionRecord';
 import { getAccountExtensionFieldMap } from './queries';
-import { syncCaseReferences } from '../sync/syncCaseReferences';
+import { updateReference } from '../sync/updateReference';
 import {
   linkRecord,
   linkRecords,
@@ -38,8 +38,10 @@ jest.mock('./queries', () => ({
 
 const mockGetExtensionMap = getAccountExtensionFieldMap as jest.Mock;
 
-jest.mock('../sync/syncCaseReferences', () => ({ syncCaseReferences: jest.fn() }));
-const mockSyncReferences = syncCaseReferences as jest.Mock;
+jest.mock('../sync/updateReference', () => ({
+  updateReference: jest.fn(),
+}));
+const mockSyncReferences = updateReference as jest.Mock;
 
 describe('case link reference syncing', () => {
   beforeEach(() => {
@@ -51,8 +53,14 @@ describe('case link reference syncing', () => {
   it('syncs only new cases, deduplicating the requested IDs', async () => {
     await linkRecords(mockRecord, [123, 456, 456], 'caseIds');
     expect(mockSyncReferences).toHaveBeenCalledWith(mockRecord, [456], 'add');
-    expect(mockSetExtensionField).toHaveBeenCalledWith(IDENTIFIER, 'caseIds', [123, 456]);
-    expect(mockSyncReferences.mock.invocationCallOrder[0]).toBeLessThan(mockSetExtensionField.mock.invocationCallOrder[0]);
+    expect(mockSetExtensionField).toHaveBeenCalledWith(
+      IDENTIFIER,
+      'caseIds',
+      [123, 456]
+    );
+    expect(mockSyncReferences.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSetExtensionField.mock.invocationCallOrder[0]
+    );
   });
 
   it('does no work when the case is already linked', async () => {
@@ -64,7 +72,11 @@ describe('case link reference syncing', () => {
   it('saves a new link without syncing a reference already handled during creation', async () => {
     await linkRecord(mockRecord, 456, 'caseIds', { referenceHandled: true });
     expect(mockSyncReferences).not.toHaveBeenCalled();
-    expect(mockSetExtensionField).toHaveBeenCalledWith(IDENTIFIER, 'caseIds', [123, 456]);
+    expect(mockSetExtensionField).toHaveBeenCalledWith(
+      IDENTIFIER,
+      'caseIds',
+      [123, 456]
+    );
   });
 
   it('syncs references when creation did not confirm handling them', async () => {
@@ -74,17 +86,30 @@ describe('case link reference syncing', () => {
 
   it('syncs the removal before unlinking', async () => {
     await unlinkRecord(mockRecord, 123, 'caseIds');
-    expect(mockSyncReferences).toHaveBeenCalledWith(mockRecord, [123], 'remove');
-    expect(mockSetExtensionField).toHaveBeenCalledWith(IDENTIFIER, 'caseIds', []);
-    expect(mockSyncReferences.mock.invocationCallOrder[0]).toBeLessThan(mockSetExtensionField.mock.invocationCallOrder[0]);
+    expect(mockSyncReferences).toHaveBeenCalledWith(
+      mockRecord,
+      [123],
+      'remove'
+    );
+    expect(mockSetExtensionField).toHaveBeenCalledWith(
+      IDENTIFIER,
+      'caseIds',
+      []
+    );
+    expect(mockSyncReferences.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSetExtensionField.mock.invocationCallOrder[0]
+    );
   });
 
-  it.each([undefined, [], [456]])('does nothing for an absent case link: %p', async ids => {
-    mockGetExtensionField.mockResolvedValue(ids);
-    await unlinkRecord(mockRecord, 123, 'caseIds');
-    expect(mockSyncReferences).not.toHaveBeenCalled();
-    expect(mockSetExtensionField).not.toHaveBeenCalled();
-  });
+  it.each([undefined, [], [456]])(
+    'does nothing for an absent case link: %p',
+    async ids => {
+      mockGetExtensionField.mockResolvedValue(ids);
+      await unlinkRecord(mockRecord, 123, 'caseIds');
+      expect(mockSyncReferences).not.toHaveBeenCalled();
+      expect(mockSetExtensionField).not.toHaveBeenCalled();
+    }
+  );
 
   it.each(['runIds', 'testIds'])('never syncs references for %s', async key => {
     await linkRecord(mockRecord, 456, key);
@@ -94,18 +119,30 @@ describe('case link reference syncing', () => {
 
   it('leaves a failed link retryable', async () => {
     mockSyncReferences.mockRejectedValueOnce(new Error('TestRail unavailable'));
-    await expect(linkRecord(mockRecord, 456, 'caseIds')).rejects.toThrow('TestRail unavailable');
+    await expect(linkRecord(mockRecord, 456, 'caseIds')).rejects.toThrow(
+      'TestRail unavailable'
+    );
     expect(mockSetExtensionField).not.toHaveBeenCalled();
     await linkRecord(mockRecord, 456, 'caseIds');
-    expect(mockSetExtensionField).toHaveBeenCalledWith(IDENTIFIER, 'caseIds', [123, 456]);
+    expect(mockSetExtensionField).toHaveBeenCalledWith(
+      IDENTIFIER,
+      'caseIds',
+      [123, 456]
+    );
   });
 
   it('leaves a failed unlink retryable', async () => {
     mockSyncReferences.mockRejectedValueOnce(new Error('TestRail unavailable'));
-    await expect(unlinkRecord(mockRecord, 123, 'caseIds')).rejects.toThrow('TestRail unavailable');
+    await expect(unlinkRecord(mockRecord, 123, 'caseIds')).rejects.toThrow(
+      'TestRail unavailable'
+    );
     expect(mockSetExtensionField).not.toHaveBeenCalled();
     await unlinkRecord(mockRecord, 123, 'caseIds');
-    expect(mockSetExtensionField).toHaveBeenCalledWith(IDENTIFIER, 'caseIds', []);
+    expect(mockSetExtensionField).toHaveBeenCalledWith(
+      IDENTIFIER,
+      'caseIds',
+      []
+    );
   });
 });
 
@@ -274,19 +311,29 @@ describe('saveNewRuns', () => {
     });
   });
 
-  it.each([undefined, false])('retries completed runs with childrenSynced=%s', async childrenSynced => {
-    const run: TestRun = {
-      kind: 'TestRun', id: 1, projectId: 100, suiteId: 1,
-      name: 'Run 1', createdOn: 0, completed: true,
-    };
-    mockGetExtensionMap.mockResolvedValueOnce({
-      run_1: { ...run, childrenSynced },
-    });
-    mockGetExtensionMap.mockResolvedValueOnce({ project_100_runIds: [1] });
+  it.each([undefined, false])(
+    'retries completed runs with childrenSynced=%s',
+    async childrenSynced => {
+      const run: TestRun = {
+        kind: 'TestRun',
+        id: 1,
+        projectId: 100,
+        suiteId: 1,
+        name: 'Run 1',
+        createdOn: 0,
+        completed: true,
+      };
+      mockGetExtensionMap.mockResolvedValueOnce({
+        run_1: { ...run, childrenSynced },
+      });
+      mockGetExtensionMap.mockResolvedValueOnce({ project_100_runIds: [1] });
 
-    expect(await saveNewRuns([run])).toEqual([run]);
-    expect(mockSetExtensionFields).toHaveBeenCalledWith(IDENTIFIER, { run_1: run });
-  });
+      expect(await saveNewRuns([run])).toEqual([run]);
+      expect(mockSetExtensionFields).toHaveBeenCalledWith(IDENTIFIER, {
+        run_1: run,
+      });
+    }
+  );
 
   it('returns empty array for empty input', async () => {
     const result = await saveNewRuns([]);

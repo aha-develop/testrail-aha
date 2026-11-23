@@ -37,21 +37,21 @@ export const createTestCase: (props: CreateProps) => Promise<void> = async ({
       `Beginning TestRail test case create for section: ${sectionId}`
     );
 
-    const syncReferences =
-      aha.settings.get(`${IDENTIFIER}.syncCaseReferences`) === true;
+    const updateReferences =
+      aha.settings.get(`${IDENTIFIER}.updateReferences`) === true;
+
     if (
-      syncReferences && (
-        typeof reference !== 'string' ||
+      updateReferences &&
+      (typeof reference !== 'string' ||
         !reference.trim() ||
-        /[,\r\n]/.test(reference)
-      )
+        /[,\r\n]/.test(reference))
     ) {
       throw new Error('Invalid test case reference request');
     }
 
     const body = {
       title,
-      ...(syncReferences ? { refs: reference.trim() } : {}),
+      ...(updateReferences ? { refs: reference?.trim() } : {}),
       template_id: 1,
       custom_preconds: precondition,
       custom_steps: steps,

@@ -1,7 +1,7 @@
 {
   "name": "aha-develop.testrail",
   "description": "TestRail",
-  "version": "1.6.0.dev",
+  "version": "1.6.0",
   "author": "Aha! (support@aha.io)",
   "repository": {
     "type": "git",
@@ -32,11 +32,11 @@
         }
       },
       "events": {
-        "syncCaseReference": {
-          "title": "Sync Test Case Reference",
-          "entryPoint": "src/events/syncCaseReference.ts",
+        "updateReference": {
+          "title": "Update Reference",
+          "entryPoint": "src/events/updateReference.ts",
           "handles": [
-            "aha-develop.testrail.syncCaseReference"
+            "aha-develop.testrail.updateReference"
           ]
         },
         "createTestCase": {
@@ -118,24 +118,6 @@
         }
       },
       "settings": {
-        "showLatestTestedResultForCases": {
-          "title": "Show latest tested result for linked cases",
-          "type": "boolean",
-          "description": "Show the latest locally synced tested result for cases without an explicitly linked test. Initial discovery checks the 20 most recent runs in the case's suite. Does not create test or run links or update their references.",
-          "scope": [
-            "account"
-          ],
-          "default": false
-        },
-        "syncCaseReferences": {
-          "title": "Sync Aha! references to test cases",
-          "type": "boolean",
-          "description": "Add the Aha! record reference to linked TestRail test cases and remove it when unlinked. Applies to future link/unlink actions only. Requires permission to edit test cases in TestRail.",
-          "scope": [
-            "account"
-          ],
-          "default": false
-        },
         "domain": {
           "title": "TestRail Subdomain",
           "type": "string",
@@ -168,7 +150,25 @@
           "scope": [
             "account"
           ]
-        }
+        },
+        "updateReferences": {
+          "title": "Sync Aha! references",
+          "type": "boolean",
+          "description": "Add the Aha! reference number to the references field when linking/creating test cases",
+          "scope": [
+            "account"
+          ],
+          "default": false
+        },
+        "showLatestResult": {
+          "title": "Show latest result",
+          "type": "boolean",
+          "description": "Linked test cases without linked tests will automatically show the latest result for that case",
+          "scope": [
+            "account"
+          ],
+          "default": false
+        },
       }
     }
   },
