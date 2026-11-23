@@ -13,17 +13,25 @@ export type LatestTestedCaseIndex = {
   latest: { testId: number; runId: number } | null;
 };
 
-export const latestTestedCaseKey = (caseId: number): string =>
-  `case_${caseId}_latestTested`;
+export const syncedLatestCaseKey = (caseId: number): string =>
+  `case_${caseId}_syncedLatest`;
 
-// Discovery and Test sync can overlap in a tab. Serialize their index writes
-// and let subsequent readers reuse completed discovery (including misses).
-let pendingIndexWork: Promise<unknown> = Promise.resolve();
-function withIndexLock<T>(work: () => Promise<T>): Promise<T> {
-  const result = pendingIndexWork.then(work);
-  pendingIndexWork = result.catch(() => undefined);
-  return result;
+export const localLatestCaseKey = (caseId: number): string =>
+  `case_${caseId}_localLatest`;
+
+function createIndexQueue() {
+  let pending: Promise<unknown> = Promise.resolve();
+  return function <T>(work: () => Promise<T>): Promise<T> {
+    const result = pending.then(work);
+    pending = result.catch(() => undefined);
+    return result;
+  };
 }
+
+// Deduplicate discovery within a tab without waiting for sync. Separate fields
+// keep discovery from overwriting synced results, including across tabs.
+const withDiscoveryLock = createIndexQueue();
+const withSyncLock = createIndexQueue();
 
 const isTested = (test: Test): boolean =>
   typeof test.statusId === 'number' && test.statusId !== UNTESTED_STATUS_ID;
@@ -77,12 +85,15 @@ export function getLatestTestedTestsForCases(
   cases: TestCase[]
 ): Promise<Record<number, Test>> {
   if (!cases.length) return Promise.resolve({});
-  return withIndexLock(async () => {
+  return withDiscoveryLock(async () => {
     const uniqueCases = [
       ...new Map(cases.map(testCase => [testCase.id, testCase])).values(),
     ];
     const indexes = await getAccountExtensionFieldMap<LatestTestedCaseIndex>(
-      uniqueCases.map(testCase => latestTestedCaseKey(testCase.id))
+      uniqueCases.flatMap(testCase => [
+        syncedLatestCaseKey(testCase.id),
+        localLatestCaseKey(testCase.id),
+      ])
     );
     const recordKeys = Object.values(indexes).flatMap(index =>
       index.latest
@@ -95,16 +106,32 @@ export function getLatestTestedTestsForCases(
     const tests: Record<number, Test> = {};
     const needsDiscovery: TestCase[] = [];
 
-    for (const testCase of uniqueCases) {
-      const index = indexes[latestTestedCaseKey(testCase.id)];
+    const validTest = (
+      index: LatestTestedCaseIndex | undefined,
+      testCase: TestCase
+    ): Test | undefined => {
       const latest = index?.latest;
       const test = latest ? records[fieldName('Test', latest.testId)] as Test : undefined;
       const run = latest ? records[fieldName('TestRun', latest.runId)] as TestRun : undefined;
       const valid = test && run &&
         test.caseId === testCase.id && test.runId === run.id &&
         suiteKey(run) === suiteKey(testCase) && isTested(test);
-      if (valid) tests[testCase.id] = test;
-      if (!index?.initialized || (latest && !valid)) {
+      return valid ? test : undefined;
+    };
+
+    for (const testCase of uniqueCases) {
+      const syncedTest = validTest(
+        indexes[syncedLatestCaseKey(testCase.id)], testCase
+      );
+      if (syncedTest) {
+        tests[testCase.id] = syncedTest;
+        continue;
+      }
+
+      const localIndex = indexes[localLatestCaseKey(testCase.id)];
+      const localTest = validTest(localIndex, testCase);
+      if (localTest) tests[testCase.id] = localTest;
+      if (!localIndex?.initialized || (localIndex.latest && !localTest)) {
         needsDiscovery.push(testCase);
       }
     }
@@ -136,7 +163,7 @@ export function getLatestTestedTestsForCases(
     await saveChunked(
       needsDiscovery.map(testCase => {
         const test = tests[testCase.id];
-        return [latestTestedCaseKey(testCase.id), {
+        return [localLatestCaseKey(testCase.id), {
           initialized: true,
           latest: test ? { testId: test.id, runId: test.runId } : null,
         }];
@@ -146,12 +173,14 @@ export function getLatestTestedTestsForCases(
   });
 }
 
-// Maintain only cases that have been viewed. Syncing an old dataset must not
-// create an account-wide backfill. A miss becomes a hit when a Test is tested.
+// Sync owns this field and initializes tested cases even before their first
+// view. Untested-only syncs cannot rule out a tested result in local history.
 export function updateLatestTestedCaseIndexes(tests: Test[]): Promise<void> {
   if (!tests.length) return Promise.resolve();
-  return withIndexLock(async () => {
-    const keys = [...new Set(tests.map(test => latestTestedCaseKey(test.caseId)))];
+  return withSyncLock(async () => {
+    const keys = [
+      ...new Set(tests.map(test => syncedLatestCaseKey(test.caseId))),
+    ];
     const indexes = await getAccountExtensionFieldMap<LatestTestedCaseIndex>(keys);
     const updates: Record<string, LatestTestedCaseIndex> = {};
     const testsById = new Map(tests.map(test => [test.id, test]));
@@ -165,11 +194,14 @@ export function updateLatestTestedCaseIndexes(tests: Test[]): Promise<void> {
       }
     }
     for (const test of tests) {
-      const key = latestTestedCaseKey(test.caseId);
+      const key = syncedLatestCaseKey(test.caseId);
       const index = updates[key] ?? indexes[key];
-      if (!index || !isTested(test)) continue;
-      if (!index.latest || test.runId > index.latest.runId) {
-        updates[key] = { ...index, latest: { testId: test.id, runId: test.runId } };
+      if (!isTested(test)) continue;
+      if (!index?.latest || test.runId > index.latest.runId) {
+        updates[key] = {
+          initialized: true,
+          latest: { testId: test.id, runId: test.runId },
+        };
       }
     }
     await saveChunked(Object.entries(updates));

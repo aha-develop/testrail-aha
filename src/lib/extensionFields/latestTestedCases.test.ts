@@ -2,7 +2,8 @@ import { IDENTIFIER, Test, TestCase, TestRun } from '../../extension';
 import queryExtensionFields from './queryExtensionFields';
 import {
   getLatestTestedTestsForCases,
-  latestTestedCaseKey,
+  localLatestCaseKey,
+  syncedLatestCaseKey,
   LATEST_TESTED_RUN_SEARCH_LIMIT,
   updateLatestTestedCaseIndexes,
 } from './latestTestedCases';
@@ -71,7 +72,7 @@ beforeEach(() => {
 
 afterEach(() => {
   expect(triggerServer).not.toHaveBeenCalled();
-  expect(updateReference).not.toHaveBeenCalled();
+  expect(updateReferences).not.toHaveBeenCalled();
 });
 
 it('selects T2 over failed T1 and Untested T3 by run ID, not Test ID or creation time', async () => {
@@ -83,13 +84,13 @@ it('selects T2 over failed T1 and Untested T3 by run ID, not Test ID or creation
   expect(await getLatestTestedTestsForCases([testCase()])).toEqual({
     1: expected,
   });
-  expect(fields[latestTestedCaseKey(1)]).toEqual({
+  expect(fields[localLatestCaseKey(1)]).toEqual({
     initialized: true,
     latest: { testId: 200, runId: 2 },
   });
   expect(write).toHaveBeenCalledTimes(1);
   expect(write).toHaveBeenCalledWith(IDENTIFIER, {
-    [latestTestedCaseKey(1)]: {
+    [localLatestCaseKey(1)]: {
       initialized: true,
       latest: { testId: 200, runId: 2 },
     },
@@ -125,7 +126,7 @@ it('checks exactly the 20 newest matching runs, including runs without the case'
   expect(
     await getLatestTestedTestsForCases([testCase(1), testCase(2)])
   ).toEqual({ 2: boundary });
-  expect(fields[latestTestedCaseKey(1)]).toEqual({
+  expect(fields[localLatestCaseKey(1)]).toEqual({
     initialized: true,
     latest: null,
   });
@@ -169,7 +170,7 @@ it('caches a miss and does not repeat discovery for Untested-only cases', async 
   query.mockClear();
   write.mockClear();
   expect(await getLatestTestedTestsForCases([testCase()])).toEqual({});
-  expect(queriedKeys()).toEqual([latestTestedCaseKey(1)]);
+  expect(queriedKeys()).toEqual([syncedLatestCaseKey(1), localLatestCaseKey(1)]);
   expect(write).not.toHaveBeenCalled();
 });
 
@@ -177,7 +178,7 @@ it('caches a miss for an empty project and performs no work for no cases', async
   expect(await getLatestTestedTestsForCases([])).toEqual({});
   expect(query).not.toHaveBeenCalled();
   expect(await getLatestTestedTestsForCases([testCase()])).toEqual({});
-  expect(fields[latestTestedCaseKey(1)]).toEqual({
+  expect(fields[localLatestCaseKey(1)]).toEqual({
     initialized: true,
     latest: null,
   });
@@ -193,7 +194,7 @@ it('reuses the cached winner but reads its current Test status', async () => {
   expect(await getLatestTestedTestsForCases([testCase()])).toEqual({
     1: fields.test_1,
   });
-  expect(queriedKeys()).toEqual([latestTestedCaseKey(1), 'test_1', 'run_1']);
+  expect(queriedKeys()).toEqual([syncedLatestCaseKey(1), localLatestCaseKey(1), 'test_1', 'run_1']);
   expect(write).not.toHaveBeenCalled();
 });
 
@@ -221,7 +222,7 @@ it('does not mark failed discovery initialized and retries on the next view', as
   await expect(getLatestTestedTestsForCases([testCase()])).rejects.toThrow(
     'Save failed'
   );
-  expect(fields[latestTestedCaseKey(1)]).toBeUndefined();
+  expect(fields[localLatestCaseKey(1)]).toBeUndefined();
   expect(await getLatestTestedTestsForCases([testCase()])).toEqual({
     1: expected,
   });
@@ -238,7 +239,7 @@ it('deduplicates concurrent discovery for the same case', async () => {
   expect(queriedKeys().filter(key => key === 'run_1_testIds')).toHaveLength(1);
 });
 
-it('maintains an initialized miss through the normal saveRecords path', async () => {
+it('supersedes a local miss through the normal saveRecords path', async () => {
   run(1);
   test(1, 1, 3);
   await getLatestTestedTestsForCases([testCase()]);
@@ -249,10 +250,11 @@ it('maintains an initialized miss through the normal saveRecords path', async ()
     1: updated,
   });
   expect(queriedKeys()).not.toContain('project_1_runIds');
+  expect(fields[localLatestCaseKey(1)]).toEqual({ initialized: true, latest: null });
 });
 
 it('keeps the newest tested run across sync batches and ignores newer Untested runs', async () => {
-  fields[latestTestedCaseKey(1)] = {
+  fields[syncedLatestCaseKey(1)] = {
     initialized: true,
     latest: { testId: 2, runId: 2 },
   };
@@ -262,7 +264,7 @@ it('keeps the newest tested run across sync batches and ignores newer Untested r
     test(4, 4, 6),
     test(2, 2, 5),
   ]);
-  expect(fields[latestTestedCaseKey(1)].latest).toEqual({
+  expect(fields[syncedLatestCaseKey(1)].latest).toEqual({
     testId: 4,
     runId: 4,
   });
@@ -271,32 +273,92 @@ it('keeps the newest tested run across sync batches and ignores newer Untested r
   expect(write).not.toHaveBeenCalled();
 });
 
-it('does not create indexes for unviewed cases during sync', async () => {
-  await updateLatestTestedCaseIndexes([test(1, 1)]);
+it('initializes an unviewed case through sync without requiring discovery', async () => {
+  run(1);
+  const expected = test(1, 1);
+  await saveRecords([expected]);
+  expect(fields[syncedLatestCaseKey(1)]).toEqual({
+    initialized: true, latest: { testId: 1, runId: 1 },
+  });
+  expect(fields[localLatestCaseKey(1)]).toBeUndefined();
+  query.mockClear();
+  write.mockClear();
+  expect(await getLatestTestedTestsForCases([testCase()])).toEqual({ 1: expected });
+  expect(queriedKeys()).toEqual([
+    syncedLatestCaseKey(1), localLatestCaseKey(1), 'test_1', 'run_1',
+  ]);
   expect(write).not.toHaveBeenCalled();
-  expect(fields[latestTestedCaseKey(1)]).toBeUndefined();
 });
 
-it('invalidates an Untested winner and discovers an older result on demand', async () => {
+it('leaves Untested-only cases eligible for historic discovery', async () => {
   run(1);
   run(2);
   const older = test(1, 1);
-  test(2, 2);
-  await getLatestTestedTestsForCases([testCase()]);
+  await saveRecords([test(2, 2, 3)]);
+  expect(fields[syncedLatestCaseKey(1)]).toBeUndefined();
+  expect(await getLatestTestedTestsForCases([testCase()])).toEqual({ 1: older });
+});
+
+it('invalidates an Untested synced winner and discovers an older result on demand', async () => {
+  run(1);
+  run(2);
+  const older = test(1, 1);
+  await saveRecords([test(2, 2)]);
   await saveRecords([{ ...fields.test_2, statusId: 3 }]);
-  expect(fields[latestTestedCaseKey(1)]).toEqual({
+  expect(fields[syncedLatestCaseKey(1)]).toEqual({
     initialized: false,
     latest: null,
   });
-  expect(await getLatestTestedTestsForCases([testCase()])).toEqual({
-    1: older,
-  });
+  expect(await getLatestTestedTestsForCases([testCase()])).toEqual({ 1: older });
 });
 
-it('preserves known winners outside the discovery window', async () => {
+it('prefers a valid synced result even when discovery has a higher run ID', async () => {
+  run(1);
+  run(2);
+  test(2, 2);
+  await getLatestTestedTestsForCases([testCase()]);
+  const synced = test(1, 1);
+  await saveRecords([synced]);
+  query.mockClear();
+  write.mockClear();
+  expect(await getLatestTestedTestsForCases([testCase()])).toEqual({ 1: synced });
+  expect(query.mock.calls[0][0]).toEqual([syncedLatestCaseKey(1), localLatestCaseKey(1)]);
+  expect(queriedKeys()).not.toContain('project_1_runIds');
+  expect(write).not.toHaveBeenCalled();
+  expect(fields[localLatestCaseKey(1)].latest).toEqual({ testId: 2, runId: 2 });
+});
+
+it.each(['empty', 'test', 'run', 'status', 'case', 'suite', 'project'])(
+  'falls back to discovery when the synced result has an invalid %s',
+  async invalid => {
+    run(1);
+    const local = test(1, 1);
+    await getLatestTestedTestsForCases([testCase()]);
+    run(2);
+    await saveRecords([test(2, 2)]);
+    if (invalid === 'empty') fields[syncedLatestCaseKey(1)] = { initialized: true, latest: null };
+    if (invalid === 'test') delete fields.test_2;
+    if (invalid === 'run') delete fields.run_2;
+    if (invalid === 'status') fields.test_2.statusId = 3;
+    if (invalid === 'case') fields.test_2.caseId = 2;
+    if (invalid === 'suite') fields.run_2.suiteId = 2;
+    if (invalid === 'project') fields.run_2.projectId = 2;
+    query.mockClear();
+    write.mockClear();
+    expect(await getLatestTestedTestsForCases([testCase()])).toEqual({ 1: local });
+    expect(queriedKeys()).not.toContain('project_1_runIds');
+    expect(write).not.toHaveBeenCalled();
+  }
+);
+
+it.each(['local', 'synced'])('preserves known %s winners outside the discovery window', async source => {
   run(1);
   const expected = test(1, 1);
-  await getLatestTestedTestsForCases([testCase()]);
+  if (source === 'synced') {
+    await saveRecords([expected]);
+  } else {
+    await getLatestTestedTestsForCases([testCase()]);
+  }
   for (let id = 2; id <= 30; id++) run(id);
   await saveRecords([test(30, 30, 3)]);
   expect(await getLatestTestedTestsForCases([testCase()])).toEqual({
@@ -304,38 +366,89 @@ it('preserves known winners outside the discovery window', async () => {
   });
 });
 
-it('does not lose a sync update that overlaps discovery of a miss', async () => {
+it.each(['miss', 'older hit'])(
+  'keeps a synced result when another client finishes discovery of a %s afterward',
+  async result => {
+    const local = run(1);
+    const original = test(1, 1, result === 'miss' ? 3 : 1);
+    let otherSave: typeof saveRecords;
+    let otherRead: typeof getLatestTestedTestsForCases;
+    jest.isolateModules(() => {
+      const otherQuery = require('./queryExtensionFields').default as jest.Mock;
+      if (otherQuery !== query) otherQuery.mockImplementation(names => query(names));
+      otherSave = require('./updates').saveRecords;
+      otherRead = require('./latestTestedCases').getLatestTestedTestsForCases;
+    });
+    expect(otherRead).not.toBe(getLatestTestedTestsForCases);
+
+    let release: () => void;
+    let started: () => void;
+    const writeStarted = new Promise<void>(resolve => { started = resolve; });
+    const holdWrite = new Promise<void>(resolve => { release = resolve; });
+    write.mockImplementationOnce(async (_identifier, values) => {
+      started();
+      await holdWrite;
+      Object.assign(fields, copy(values));
+    });
+    const discovery = getLatestTestedTestsForCases([testCase()]);
+    await writeStarted;
+    let synced: Test;
+    try {
+      // A completed run will not need another Test sync to repair its index.
+      if (result === 'miss') {
+        Object.assign(local, { completed: true, childrenSynced: true });
+        synced = { ...original, statusId: 1 };
+      } else {
+        Object.assign(run(2), { completed: true, childrenSynced: true });
+        synced = test(2, 2);
+      }
+      // Sync must complete while discovery is still waiting to save.
+      await otherSave([synced]);
+    } finally {
+      release();
+    }
+    await discovery;
+    expect(fields[syncedLatestCaseKey(1)].latest).toEqual({
+      testId: synced.id, runId: synced.runId,
+    });
+    expect(fields[localLatestCaseKey(1)].latest).toEqual(
+      result === 'miss' ? null : { testId: 1, runId: 1 }
+    );
+    query.mockClear();
+    expect(await otherRead([testCase()])).toEqual({ 1: synced });
+    expect(queriedKeys()).not.toContain('project_1_runIds');
+  }
+);
+
+it('reads local data without waiting for an in-progress sync index write', async () => {
   run(1);
-  test(1, 1, 3);
+  const local = test(1, 1);
+  await getLatestTestedTestsForCases([testCase()]);
+  run(2);
+  const synced = test(2, 2);
   let release: () => void;
   let started: () => void;
-  const writeStarted = new Promise<void>(resolve => {
-    started = resolve;
-  });
-  const holdWrite = new Promise<void>(resolve => {
-    release = resolve;
-  });
+  const writeStarted = new Promise<void>(resolve => { started = resolve; });
+  const holdWrite = new Promise<void>(resolve => { release = resolve; });
   write.mockImplementationOnce(async (_identifier, values) => {
     started();
     await holdWrite;
     Object.assign(fields, copy(values));
   });
-  const discovery = getLatestTestedTestsForCases([testCase()]);
+  const sync = updateLatestTestedCaseIndexes([synced]);
   await writeStarted;
-  const updated = { ...fields.test_1, statusId: 1 };
-  const sync = saveRecords([updated]);
-  release();
-  await Promise.all([discovery, sync]);
-  expect(fields[latestTestedCaseKey(1)]).toEqual({
-    initialized: true,
-    latest: { testId: 1, runId: 1 },
-  });
+  try {
+    expect(await getLatestTestedTestsForCases([testCase()])).toEqual({ 1: local });
+  } finally {
+    release();
+  }
+  await sync;
+  expect(await getLatestTestedTestsForCases([testCase()])).toEqual({ 1: synced });
 });
 
 it('chunks large index updates at the existing 500-field write limit', async () => {
   const tests = Array.from({ length: 501 }, (_, index) => {
     const id = index + 1;
-    fields[latestTestedCaseKey(id)] = { initialized: true, latest: null };
     return test(id, 1, 1, id);
   });
   await updateLatestTestedCaseIndexes(tests);
