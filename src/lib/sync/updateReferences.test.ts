@@ -3,7 +3,10 @@ import { ExtensionRecord } from '../extensionRecord';
 import { waitForBatchedMutation } from './interface';
 import { updateReferences } from './updateReferences';
 
-jest.mock('./interface', () => ({ waitForBatchedMutation: jest.fn() }));
+jest.mock('./interface', () => ({
+  ...jest.requireActual('./interface'),
+  waitForBatchedMutation: jest.fn(),
+}));
 
 const mockWait = waitForBatchedMutation as jest.Mock;
 const getSetting = jest.fn();

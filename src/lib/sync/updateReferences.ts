@@ -1,7 +1,7 @@
 import { IDENTIFIER } from '../../extension';
 import { ExtensionRecord } from '../extensionRecord';
 import { APIResult } from '../api';
-import { waitForBatchedMutation } from './interface';
+import { BatchedMutationError, waitForBatchedMutation } from './interface';
 
 // Lower than elsewhere, as each update makes 2 API calls, and we want to limit the chance
 // of running into an API timeout as part of a manual process.
@@ -71,7 +71,14 @@ export const updateReferences = async (
         ])
       ),
     }).catch(error => {
-      // Preserve successes from earlier batches if dispatch or polling fails.
+      // Preserve successes from earlier attempts as well as earlier batches.
+      if (error instanceof BatchedMutationError) {
+        for (const [index, eventKey] of eventKeys.entries()) {
+          const result = error.results[eventKey];
+          if (result && !result.error) successfulCaseIds.push(batch[index]);
+        }
+      }
+
       throw new ReferenceUpdateError(
         [...errors, error.message || String(error)].join('\n'),
         successfulCaseIds

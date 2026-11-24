@@ -60,6 +60,16 @@ type PagedWaitProps = WaitProps & {
 
 type LambdaResultMap = { [key: string]: LambdaResult };
 
+export class BatchedMutationError extends Error {
+  constructor(
+    message: string,
+    readonly results: LambdaResultMap
+  ) {
+    super(message);
+    this.name = 'BatchedMutationError';
+  }
+}
+
 const isRateLimited = (result: LambdaResult) =>
   result.error === true && isTimeoutMessage(result.message);
 
@@ -157,14 +167,23 @@ const executeLambdaBatch = async ({
   let minimumRetryAt = 0;
 
   while (pendingKeys.length) {
-    await callLambdaBatch({
-      eventKeys: pendingKeys,
-      lambdaFunc,
-      argsForKeys,
-      minimumRetryAt,
-    });
+    let attempt: LambdaResultMap;
+    try {
+      await callLambdaBatch({
+        eventKeys: pendingKeys,
+        lambdaFunc,
+        argsForKeys,
+        minimumRetryAt,
+      });
 
-    const attempt = await waitForResults(pendingKeys, waitForAll);
+      attempt = await waitForResults(pendingKeys, waitForAll);
+    } catch (error) {
+      if (!waitForAll) throw error;
+
+      // A retry can fail after other mutations have already succeeded.
+      throw new BatchedMutationError(error.message || String(error), results);
+    }
+
     Object.assign(results, attempt);
 
     if (

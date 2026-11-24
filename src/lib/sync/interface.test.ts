@@ -255,6 +255,66 @@ describe('common API interface behaviours', () => {
       loadAttributes: async () => {},
     } as unknown as ExtensionRecord;
 
+    it.each(['dispatch', 'polling'])(
+      'links confirmed successes across attempts and batches when retry %s fails',
+      async failure => {
+        const attempts: Record<number, number> = {};
+        const failureMessage = `Retry ${failure} failed`;
+
+        Object.assign(aha, {
+          settings: { get: () => true },
+          triggerServer: jest.fn(async (_event, { caseId, eventKey }) => {
+            attempts[caseId] = (attempts[caseId] || 0) + 1;
+
+            if (caseId === 8) {
+              fields[eventKey] = { error: true, message: 'Permission denied' };
+            } else if (caseId !== 7) {
+              fields[eventKey] = success;
+            } else if (attempts[caseId] === 1) {
+              fields[eventKey] = {
+                error: true,
+                message: formatTimeoutMessage(Date.now() + 5000),
+              };
+            } else if (failure === 'dispatch') {
+              throw new Error(failureMessage);
+            } else {
+              (getAccountExtensionFieldMap as jest.Mock).mockRejectedValueOnce(
+                new Error(failureMessage)
+              );
+            }
+          }),
+        });
+
+        const setExtensionField = jest.fn(async () => {});
+        const linkedRecord = {
+          ...record,
+          getExtensionField: async () => [100],
+          setExtensionField,
+        } as unknown as ExtensionRecord;
+
+        const pending = expect(
+          linkRecords(linkedRecord, [1, 2, 3, 4, 5, 6, 7, 8], 'caseIds')
+        ).rejects.toMatchObject({
+          name: 'ReferenceUpdateError',
+          message: expect.stringContaining(failureMessage),
+          successfulCaseIds: [1, 2, 3, 4, 5, 6],
+        });
+
+        await jest.runAllTimersAsync();
+        await pending;
+
+        expect(setExtensionField).toHaveBeenCalledTimes(1);
+        expect(setExtensionField).toHaveBeenCalledWith(
+          IDENTIFIER,
+          'caseIds',
+          [100, 1, 2, 3, 4, 5, 6]
+        );
+        expect(attempts).toEqual({
+          1: 1, 2: 1, 3: 1, 4: 1, 5: 1, 6: 1, 7: 2, 8: 1,
+        });
+      }
+    );
+
     it('retains confirmed successes when another case never returns', async () => {
       Object.assign(aha, {
         settings: { get: () => true },
