@@ -16,7 +16,6 @@ const args = {
   eventKey: 'reference-result',
   caseId: 12,
   reference: 'ABC-1',
-  operation: 'add' as const,
 };
 
 beforeEach(() => {
@@ -31,8 +30,10 @@ it.each([false, undefined, 'true'])(
   async setting => {
     getSetting.mockReturnValue(setting);
     await updateReference(args);
-    expect(getSetting).toHaveBeenCalledWith(`${IDENTIFIER}.updateReference`);
+
+    expect(getSetting).toHaveBeenCalledWith(`${IDENTIFIER}.updateReferences`);
     expect(mockFetch).not.toHaveBeenCalled();
+
     expect(mockLog).toHaveBeenCalledWith(
       expect.objectContaining({ error: false })
     );
@@ -50,11 +51,13 @@ it.each([
   async (refs, expected) => {
     mockFetch.mockResolvedValueOnce({ refs });
     await updateReference(args);
+
     expect(mockFetch).toHaveBeenNthCalledWith(1, {
       record,
       eventKey: args.eventKey,
       path: 'get_case/12',
     });
+
     expect(mockFetch).toHaveBeenNthCalledWith(2, {
       record,
       eventKey: args.eventKey,
@@ -62,6 +65,7 @@ it.each([
       method: 'POST',
       body: { refs: expected },
     });
+
     expect(mockLog).toHaveBeenCalledWith(
       expect.objectContaining({
         error: false,
@@ -76,6 +80,7 @@ it.each(['ABC-1', ' OTHER-2, ABC-1 ', 'ABC-1, ABC-1'])(
   async refs => {
     mockFetch.mockResolvedValueOnce({ refs });
     await updateReference(args);
+
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockLog).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -83,34 +88,6 @@ it.each(['ABC-1', ' OTHER-2, ABC-1 ', 'ABC-1, ABC-1'])(
         result: { changed: false },
       })
     );
-  }
-);
-
-it.each([
-  ['ABC-1', ''],
-  [' ABC-1 , , ABC-1 ', ''],
-  ['ABC-10, ABC-1, OTHER-2', 'ABC-10, OTHER-2'],
-  ['ABC-1, OTHER-2, ABC-1', ' OTHER-2'],
-])(
-  'removes only exact matches from %p, including duplicates',
-  async (refs, expected) => {
-    mockFetch.mockResolvedValueOnce({ refs });
-    await updateReference({ ...args, operation: 'remove' });
-    expect(mockFetch).toHaveBeenLastCalledWith(
-      expect.objectContaining({
-        method: 'POST',
-        body: { refs: expected },
-      })
-    );
-  }
-);
-
-it.each([null, '', 'ABC-10, OTHER-2'])(
-  'does not write if removal is already satisfied: %p',
-  async refs => {
-    mockFetch.mockResolvedValueOnce({ refs });
-    await updateReference({ ...args, operation: 'remove' });
-    expect(mockFetch).toHaveBeenCalledTimes(1);
   }
 );
 
@@ -123,10 +100,11 @@ it.each([
   { reference: '  ' },
   { reference: 'ABC-1,ABC-2' },
   { reference: 'ABC-1\n' },
-  { operation: 'replace' },
 ])('rejects invalid arguments %p', async invalid => {
   await updateReference({ ...args, ...invalid } as any);
+
   expect(mockFetch).not.toHaveBeenCalled();
+
   expect(mockLog).toHaveBeenCalledWith(
     expect.objectContaining({ error: true })
   );
@@ -135,6 +113,7 @@ it.each([
 it('does not replace references if the GET response is malformed', async () => {
   mockFetch.mockResolvedValueOnce({});
   await updateReference(args);
+
   expect(mockFetch).toHaveBeenCalledTimes(1);
   expect(mockLog).toHaveBeenCalledWith(
     expect.objectContaining({ error: true })
@@ -144,6 +123,7 @@ it('does not replace references if the GET response is malformed', async () => {
 it('preserves errors already reported by a failed GET', async () => {
   mockFetch.mockResolvedValueOnce(null);
   await updateReference(args);
+
   expect(mockFetch).toHaveBeenCalledTimes(1);
   expect(mockLog).not.toHaveBeenCalled();
 });
@@ -152,15 +132,18 @@ it('preserves POST errors and re-reads references on retry', async () => {
   mockFetch
     .mockResolvedValueOnce({ refs: 'OTHER-1' })
     .mockResolvedValueOnce(null);
+
   await updateReference(args);
   expect(mockLog).not.toHaveBeenCalled();
 
   mockFetch.mockResolvedValueOnce({ refs: 'OTHER-1, NEW-2' });
   await updateReference(args);
+
   expect(mockFetch).toHaveBeenNthCalledWith(
     3,
     expect.objectContaining({ path: 'get_case/12' })
   );
+
   expect(mockFetch).toHaveBeenLastCalledWith(
     expect.objectContaining({
       body: { refs: 'OTHER-1, NEW-2, ABC-1' },
@@ -172,6 +155,7 @@ it('can retry after a write succeeded but its response was lost', async () => {
   mockFetch
     .mockResolvedValueOnce({ refs: null })
     .mockRejectedValueOnce(new Error('Connection lost'));
+
   await updateReference(args);
   expect(mockLog).toHaveBeenCalledWith(
     expect.objectContaining({ error: true })
@@ -179,6 +163,7 @@ it('can retry after a write succeeded but its response was lost', async () => {
 
   mockFetch.mockResolvedValueOnce({ refs: 'ABC-1' });
   await updateReference(args);
+
   expect(mockFetch).toHaveBeenCalledTimes(3);
   expect(mockLog).toHaveBeenLastCalledWith(
     expect.objectContaining({ error: false })

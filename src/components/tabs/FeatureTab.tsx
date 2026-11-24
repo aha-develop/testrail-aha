@@ -46,7 +46,7 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   const domain = settings.get('domain') as string | undefined;
   const syncDelay = settings.get('syncDelay') as number | undefined;
   const showLatestTestedResultForCases =
-    settings.get('showLatestTestedResultForCases') === true;
+    settings.get('showLatestResult') === true;
 
   useEffect(() => {
     let active = true;
@@ -55,12 +55,17 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
       setLoadError(null);
       try {
         const tabData = await getFeatureTabData(
-          caseIds, runIds, testIds, showLatestTestedResultForCases
+          caseIds,
+          runIds,
+          testIds,
+          showLatestTestedResultForCases
         );
         if (active) setTabData(tabData);
       } catch (error) {
         if (active) {
-          setLoadError(error.message || 'Could not load test results. Please try again.');
+          setLoadError(
+            error.message || 'Could not load test results. Please try again.'
+          );
         }
       } finally {
         if (active) setLoading(false);
@@ -85,16 +90,23 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   let caseRows = null;
   let runRows = null;
 
-  const { testCases, runs, runTestMap, tests, linkedTests, comments, statuses } =
-    tabData || {
-      testCases: [],
-      runs: [],
-      runTestMap: {},
-      tests: {},
-      linkedTests: [],
-      comments: {},
-      statuses: {},
-    };
+  const {
+    testCases,
+    runs,
+    runTestMap,
+    tests,
+    linkedTests,
+    comments,
+    statuses,
+  } = tabData || {
+    testCases: [],
+    runs: [],
+    runTestMap: {},
+    tests: {},
+    linkedTests: [],
+    comments: {},
+    statuses: {},
+  };
 
   // Prevent errors if a linked record was deleted (e.g. from the suite ignore-list)
   const existingCaseIds = testCases.map(testCase => testCase.id);
@@ -249,7 +261,9 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
       {loadError && (
         <aha-alert type='danger'>
           {loadError}
-          <aha-button kind='link' onClick={reloadTabData}>Try again</aha-button>
+          <aha-button kind='link' onClick={reloadTabData}>
+            Try again
+          </aha-button>
         </aha-alert>
       )}
       {loading ? (

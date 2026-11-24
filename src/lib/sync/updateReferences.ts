@@ -1,15 +1,17 @@
 import { IDENTIFIER } from '../../extension';
 import { ExtensionRecord } from '../extensionRecord';
 import { APIResult } from '../api';
-import type { ReferenceOperation } from '../references';
-import { waitForLambdaBatch } from './interface';
+import { waitForBatchedMutation } from './interface';
 
 // Lower than elsewhere, as each update makes 2 API calls, and we want to limit the chance
 // of running into an API timeout as part of a manual process.
 const REFERENCE_CONCURRENCY = 5;
 
 export class ReferenceUpdateError extends Error {
-  constructor(message: string, readonly successfulCaseIds: number[]) {
+  constructor(
+    message: string,
+    readonly successfulCaseIds: number[]
+  ) {
     super(message);
     this.name = 'ReferenceUpdateError';
   }
@@ -17,8 +19,7 @@ export class ReferenceUpdateError extends Error {
 
 export const updateReferences = async (
   record: ExtensionRecord,
-  caseIds: number[],
-  operation: ReferenceOperation
+  caseIds: number[]
 ): Promise<void> => {
   if (
     !caseIds.length ||
@@ -40,7 +41,7 @@ export const updateReferences = async (
   const reference = referenceRecord.referenceNum;
 
   if (!reference?.trim()) {
-    throw new Error('Could not load the Aha! record reference');
+    throw new Error('Error retrieving Aha! record reference');
   }
 
   const uniqueCaseIds = [...new Set(caseIds)];
@@ -58,7 +59,7 @@ export const updateReferences = async (
         `updateReference-${record.id}-${caseId}-${Date.now()}-${Math.random().toString(36).slice(4)}`
     );
 
-    const results = await waitForLambdaBatch<APIResult>({
+    const results = await waitForBatchedMutation<APIResult>({
       eventKeys,
       lambdaFunc: async args => {
         await aha.triggerServer(`${IDENTIFIER}.updateReference`, args);
@@ -66,7 +67,7 @@ export const updateReferences = async (
       argsForKeys: Object.fromEntries(
         eventKeys.map((key, index) => [
           key,
-          { caseId: batch[index], reference, operation },
+          { caseId: batch[index], reference },
         ])
       ),
     }).catch(error => {

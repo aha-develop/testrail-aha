@@ -1,16 +1,13 @@
 import { IDENTIFIER } from '../extension';
 import { BaseParams, fetchTestRail, logResult } from './api';
 
-export type ReferenceOperation = 'add' | 'remove';
-
 export type ReferenceParams = {
   caseId: number;
   reference: string;
-  operation: ReferenceOperation;
 };
 
 // The reference field is a comma-separated list of references.
-// There's no way to add/remove a single reference through the API.
+// There's no way to add a single reference through the API.
 //
 // Because of this, we have to load the current value before updating it,
 // to reduce the chance we overwrite existing values.
@@ -19,7 +16,6 @@ export const updateReference = async ({
   eventKey,
   caseId,
   reference,
-  operation,
 }: BaseParams & ReferenceParams): Promise<void> => {
   try {
     if (aha.settings.get(`${IDENTIFIER}.updateReferences`) !== true) {
@@ -37,8 +33,7 @@ export const updateReference = async ({
       caseId <= 0 ||
       typeof reference !== 'string' ||
       !reference.trim() ||
-      /[,\r\n]/.test(reference) ||
-      (operation !== 'add' && operation !== 'remove')
+      /[,\r\n]/.test(reference)
     ) {
       throw new Error('Invalid reference update params');
     }
@@ -50,22 +45,18 @@ export const updateReference = async ({
       path: `get_case/${caseId}`,
     });
 
-    if (!current) throw new Error('Error retrieving current reference');
+    // Any failure in fetching the current case will be written to the event key,
+    // so just early return.
+    if (!current) return;
+    if (current.refs === undefined)
+      throw new Error('Error parsing references from TestRail');
 
     const refs: string = current.refs ?? '';
     const tokens = refs.split(',');
-    const present = tokens.some(token => token.trim() === reference);
-    const changed = operation === 'add' ? !present : present;
+    const changed = !tokens.some(token => token.trim() === reference);
 
     if (changed) {
-      const updatedRefs =
-        operation === 'add'
-          ? refs.trim()
-            ? `${refs}, ${reference}`
-            : reference
-          : tokens
-              .filter(token => token.trim() && token.trim() !== reference)
-              .join(',');
+      const updatedRefs = refs.trim() ? `${refs}, ${reference}` : reference;
 
       const updated = await fetchTestRail({
         record,
@@ -75,7 +66,8 @@ export const updateReference = async ({
         body: { refs: updatedRefs },
       });
 
-      if (!updated) throw new Error('Error updating reference');
+      // Again, preserve the error from a failed update
+      if (!updated) return;
     }
 
     await logResult({

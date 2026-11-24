@@ -1,12 +1,9 @@
 import { IDENTIFIER, TestCase } from '../extension';
+import type { LinkOptions } from './extensionFields/updates';
 import { BaseParams, fetchTestRail, logResult } from './api';
 
-// Keep the case fields at the top level for clients using the older response.
-export type CreateTestCaseResult = TestCase & {
-  // True when the server applied the reference or deliberately omitted it
-  // because syncing was disabled. Absent on older server responses.
-  referenceHandled?: boolean;
-};
+// Results prior to v1.6.0 will be missing the LinkOptions handling.
+export type CreateTestCaseResult = TestCase & LinkOptions;
 
 export type CreateTestCaseParams = {
   projectId: number;

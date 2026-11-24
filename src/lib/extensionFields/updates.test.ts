@@ -1,7 +1,10 @@
 import { IDENTIFIER, TestCase, TestResult, TestRun } from '../../extension';
 import { ExtensionRecord } from '../extensionRecord';
 import { getAccountExtensionFieldMap } from './queries';
-import { ReferenceUpdateError, updateReferences } from '../sync/updateReferences';
+import {
+  ReferenceUpdateError,
+  updateReferences,
+} from '../sync/updateReferences';
 import {
   linkRecord,
   linkRecords,
@@ -42,6 +45,7 @@ jest.mock('../sync/updateReferences', () => ({
   ...jest.requireActual('../sync/updateReferences'),
   updateReferences: jest.fn(),
 }));
+
 const mockSyncReferences = updateReferences as jest.Mock;
 
 describe('case link reference syncing', () => {
@@ -53,12 +57,13 @@ describe('case link reference syncing', () => {
 
   it('syncs only new cases, deduplicating the requested IDs', async () => {
     await linkRecords(mockRecord, [123, 456, 456], 'caseIds');
-    expect(mockSyncReferences).toHaveBeenCalledWith(mockRecord, [456], 'add');
+    expect(mockSyncReferences).toHaveBeenCalledWith(mockRecord, [456]);
     expect(mockSetExtensionField).toHaveBeenCalledWith(
       IDENTIFIER,
       'caseIds',
       [123, 456]
     );
+
     expect(mockSyncReferences.mock.invocationCallOrder[0]).toBeLessThan(
       mockSetExtensionField.mock.invocationCallOrder[0]
     );
@@ -73,6 +78,7 @@ describe('case link reference syncing', () => {
   it('saves a new link without syncing a reference already handled during creation', async () => {
     await linkRecord(mockRecord, 456, 'caseIds', { referenceHandled: true });
     expect(mockSyncReferences).not.toHaveBeenCalled();
+
     expect(mockSetExtensionField).toHaveBeenCalledWith(
       IDENTIFIER,
       'caseIds',
@@ -82,23 +88,18 @@ describe('case link reference syncing', () => {
 
   it('syncs references when creation did not confirm handling them', async () => {
     await linkRecord(mockRecord, 456, 'caseIds', { referenceHandled: false });
-    expect(mockSyncReferences).toHaveBeenCalledWith(mockRecord, [456], 'add');
+    expect(mockSyncReferences).toHaveBeenCalledWith(mockRecord, [456]);
   });
 
-  it('syncs the removal before unlinking', async () => {
+  it('unlinks a case without changing its TestRail references', async () => {
+    mockGetExtensionField.mockResolvedValue([123, 456]);
     await unlinkRecord(mockRecord, 123, 'caseIds');
-    expect(mockSyncReferences).toHaveBeenCalledWith(
-      mockRecord,
-      [123],
-      'remove'
-    );
+
+    expect(mockSyncReferences).not.toHaveBeenCalled();
     expect(mockSetExtensionField).toHaveBeenCalledWith(
       IDENTIFIER,
       'caseIds',
-      []
-    );
-    expect(mockSyncReferences.mock.invocationCallOrder[0]).toBeLessThan(
-      mockSetExtensionField.mock.invocationCallOrder[0]
+      [456]
     );
   });
 
@@ -107,6 +108,7 @@ describe('case link reference syncing', () => {
     async ids => {
       mockGetExtensionField.mockResolvedValue(ids);
       await unlinkRecord(mockRecord, 123, 'caseIds');
+
       expect(mockSyncReferences).not.toHaveBeenCalled();
       expect(mockSetExtensionField).not.toHaveBeenCalled();
     }
@@ -123,7 +125,9 @@ describe('case link reference syncing', () => {
     await expect(linkRecord(mockRecord, 456, 'caseIds')).rejects.toThrow(
       'TestRail unavailable'
     );
+
     expect(mockSetExtensionField).not.toHaveBeenCalled();
+
     await linkRecord(mockRecord, 456, 'caseIds');
     expect(mockSetExtensionField).toHaveBeenCalledWith(
       IDENTIFIER,
@@ -132,57 +136,61 @@ describe('case link reference syncing', () => {
     );
   });
 
-  it('leaves a failed unlink retryable', async () => {
-    mockSyncReferences.mockRejectedValueOnce(new Error('TestRail unavailable'));
-    await expect(unlinkRecord(mockRecord, 123, 'caseIds')).rejects.toThrow(
-      'TestRail unavailable'
-    );
-    expect(mockSetExtensionField).not.toHaveBeenCalled();
-    await unlinkRecord(mockRecord, 123, 'caseIds');
-    expect(mockSetExtensionField).toHaveBeenCalledWith(
-      IDENTIFIER,
-      'caseIds',
-      []
-    );
-  });
-
   it('awaits saving successful links before raising the reference error, then retries only failures', async () => {
     let linkedIds = [123];
-    mockGetExtensionField.mockImplementation(async () => linkedIds);
     let finishSave: () => void;
-    mockSetExtensionField.mockImplementationOnce(async (_identifier, _key, ids) => {
-      await new Promise<void>(resolve => { finishSave = resolve; });
-      linkedIds = ids;
-    });
+    mockGetExtensionField.mockImplementation(async () => linkedIds);
+
+    mockSetExtensionField.mockImplementationOnce(
+      async (_identifier, _key, ids) => {
+        await new Promise<void>(resolve => {
+          finishSave = resolve;
+        });
+        linkedIds = ids;
+      }
+    );
+
     const error = new ReferenceUpdateError('C789: Permission denied', [456]);
     mockSyncReferences.mockRejectedValueOnce(error);
 
     let settled = false;
-    const pending = expect(linkRecords(mockRecord, [123, 456, 789, 456], 'caseIds'))
+    const pending = expect(
+      linkRecords(mockRecord, [123, 456, 789, 456], 'caseIds')
+    )
       .rejects.toBe(error)
       .then(() => {
         settled = true;
       });
+
     // Allow the initial read and failed reference sync to reach the pending save.
     await new Promise(resolve => setImmediate(resolve));
-    expect(mockSetExtensionField).toHaveBeenCalledWith(
-      IDENTIFIER, 'caseIds', [123, 456]
-    );
     expect(settled).toBe(false);
+    expect(mockSetExtensionField).toHaveBeenCalledWith(
+      IDENTIFIER,
+      'caseIds',
+      [123, 456]
+    );
 
     finishSave();
     await pending;
     await linkRecords(mockRecord, [123, 456, 789], 'caseIds');
-    expect(mockSyncReferences).toHaveBeenLastCalledWith(mockRecord, [789], 'add');
+
+    expect(mockSyncReferences).toHaveBeenLastCalledWith(mockRecord, [789]);
     expect(mockSetExtensionField).toHaveBeenLastCalledWith(
-      IDENTIFIER, 'caseIds', [123, 456, 789]
+      IDENTIFIER,
+      'caseIds',
+      [123, 456, 789]
     );
   });
 
   it('does not save links when every reference update fails', async () => {
     const error = new ReferenceUpdateError('Permission denied', []);
     mockSyncReferences.mockRejectedValueOnce(error);
-    await expect(linkRecords(mockRecord, [456, 789], 'caseIds')).rejects.toBe(error);
+
+    await expect(linkRecords(mockRecord, [456, 789], 'caseIds')).rejects.toBe(
+      error
+    );
+
     expect(mockSetExtensionField).not.toHaveBeenCalled();
   });
 });

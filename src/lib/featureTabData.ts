@@ -27,6 +27,7 @@ export async function getFeatureTabData(
     getRecords<TestRun>(runIds, 'TestRun'),
     getRecords<Test>(testIds, 'Test'),
   ]);
+
   const explicitTests: Record<number, Test> = {};
   for (const test of linkedTests) explicitTests[test.caseId] = test;
 
@@ -38,6 +39,7 @@ export async function getFeatureTabData(
       : Promise.resolve({}),
     getRunRowData(runs.map(run => run.id)),
   ]);
+
   const tests: Record<number, Test> = { ...inferredTests, ...explicitTests };
   const displayedTests = [...runTests, ...Object.values(tests)];
   const [comments, statuses] = await Promise.all([

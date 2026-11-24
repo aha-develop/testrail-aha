@@ -1,19 +1,55 @@
 import { Status, Test, TestCase } from '../extension';
 import { getFeatureTabData } from './featureTabData';
-import { getLinkedComments, getRecords, getRunRowData } from './extensionFields/queries';
+import {
+  getLinkedComments,
+  getRecords,
+  getRunRowData,
+} from './extensionFields/queries';
 import { getLatestTestedTestsForCases } from './extensionFields/latestTestedCases';
 
-jest.mock('./extensionFields/queries', () => ({
-  getRecords: jest.fn(), getLinkedComments: jest.fn(), getRunRowData: jest.fn(),
+jest.mock('./extensionFields/latestTestedCases', () => ({
+  getLatestTestedTestsForCases: jest.fn(),
 }));
-jest.mock('./extensionFields/latestTestedCases', () => ({ getLatestTestedTestsForCases: jest.fn() }));
+
+jest.mock('./extensionFields/queries', () => ({
+  getRecords: jest.fn(),
+  getLinkedComments: jest.fn(),
+  getRunRowData: jest.fn(),
+}));
 
 const cases: TestCase[] = [1, 2].map(id => ({
-  kind: 'TestCase', id, projectId: 1, suiteId: 1, title: `Case ${id}`, createdOn: 0,
+  kind: 'TestCase',
+  id,
+  projectId: 1,
+  suiteId: 1,
+  title: `Case ${id}`,
+  createdOn: 0,
 }));
-const inferred: Test = { kind: 'Test', id: 20, runId: 2, caseId: 2, statusId: 5 };
-const explicit: Test = { kind: 'Test', id: 10, runId: 1, caseId: 1, statusId: 3 };
-const status: Status = { kind: 'Status', id: 5, label: 'Failed', colorBright: 0, colorMedium: 0, colorDark: 0 };
+
+const inferred: Test = {
+  kind: 'Test',
+  id: 20,
+  runId: 2,
+  caseId: 2,
+  statusId: 5,
+};
+
+const explicit: Test = {
+  kind: 'Test',
+  id: 10,
+  runId: 1,
+  caseId: 1,
+  statusId: 3,
+};
+
+const status: Status = {
+  kind: 'Status',
+  id: 5,
+  label: 'Failed',
+  colorBright: 0,
+  colorMedium: 0,
+  colorDark: 0,
+};
 
 beforeEach(() => {
   jest.resetAllMocks();
@@ -23,9 +59,15 @@ beforeEach(() => {
     if (kind === 'Status') return [status];
     return [];
   });
+
   (getRunRowData as jest.Mock).mockResolvedValue([{}, []]);
-  (getLinkedComments as jest.Mock).mockResolvedValue({ 20: { timestamp: 123, comment: 'Failed' } });
-  (getLatestTestedTestsForCases as jest.Mock).mockResolvedValue({ 2: inferred });
+  (getLinkedComments as jest.Mock).mockResolvedValue({
+    20: { timestamp: 123, comment: 'Failed' },
+  });
+
+  (getLatestTestedTestsForCases as jest.Mock).mockResolvedValue({
+    2: inferred,
+  });
 });
 
 it('preserves existing behavior and performs no inference when the setting is off', async () => {

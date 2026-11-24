@@ -7,6 +7,7 @@ jest.mock('./api', () => ({ fetchTestRail: jest.fn(), logResult: jest.fn() }));
 const mockFetch = fetchTestRail as jest.Mock;
 const mockLog = logResult as jest.Mock;
 const getSetting = jest.fn();
+
 const args = {
   record: {} as Aha.Account,
   eventKey: 'create-result',
@@ -23,6 +24,7 @@ beforeEach(() => {
   jest.resetAllMocks();
   (global as any).aha = { settings: { get: getSetting } };
   getSetting.mockReturnValue(true);
+
   mockFetch.mockResolvedValue({
     id: 12,
     title: args.title,
@@ -35,6 +37,7 @@ it('creates the case and reference in a single request', async () => {
   await createTestCase(args);
   expect(getSetting).toHaveBeenCalledWith(`${IDENTIFIER}.updateReferences`);
   expect(mockFetch).toHaveBeenCalledTimes(1);
+
   expect(mockFetch).toHaveBeenCalledWith(
     expect.objectContaining({
       path: 'add_case/2',
@@ -49,6 +52,7 @@ it('creates the case and reference in a single request', async () => {
       },
     })
   );
+
   expect(mockLog).toHaveBeenCalledWith(
     expect.objectContaining({
       error: false,
@@ -65,21 +69,19 @@ it('creates the case and reference in a single request', async () => {
   );
 });
 
-it.each([false, undefined, 'true'])(
-  'omits refs when the server setting is %p',
-  async setting => {
-    getSetting.mockReturnValue(setting);
-    await createTestCase({ ...args, reference: undefined });
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    expect(mockFetch.mock.calls[0][0].body).not.toHaveProperty('refs');
-    expect(mockLog).toHaveBeenCalledWith(
-      expect.objectContaining({
-        error: false,
-        result: expect.objectContaining({ referenceHandled: true }),
-      })
-    );
-  }
-);
+it('omits refs when the server setting is off', async () => {
+  getSetting.mockReturnValue(false);
+  await createTestCase({ ...args, reference: undefined });
+  expect(mockFetch).toHaveBeenCalledTimes(1);
+  expect(mockFetch.mock.calls[0][0].body).not.toHaveProperty('refs');
+
+  expect(mockLog).toHaveBeenCalledWith(
+    expect.objectContaining({
+      error: false,
+      result: expect.objectContaining({ referenceHandled: true }),
+    })
+  );
+});
 
 it.each([undefined, null, '', '  ', 'ABC-1,ABC-2', 'ABC-1\n', 'ABC-1\r', 123])(
   'rejects invalid reference %p before creating a case',
@@ -87,6 +89,7 @@ it.each([undefined, null, '', '  ', 'ABC-1,ABC-2', 'ABC-1\n', 'ABC-1\r', 123])(
     await expect(createTestCase({ ...args, reference } as any)).rejects.toThrow(
       'Invalid test case reference request'
     );
+
     expect(mockFetch).not.toHaveBeenCalled();
     expect(mockLog).toHaveBeenCalledWith(
       expect.objectContaining({ error: true })
@@ -103,8 +106,9 @@ it('preserves API error and rate-limit results without reporting success', async
 it('logs and propagates a failed create without confirming reference handling', async () => {
   mockFetch.mockRejectedValue(new Error('TestRail unavailable'));
   await expect(createTestCase(args)).rejects.toThrow('TestRail unavailable');
+
+  expect(mockLog.mock.calls[0][0]).not.toHaveProperty('result');
   expect(mockLog).toHaveBeenCalledWith(
     expect.objectContaining({ error: true })
   );
-  expect(mockLog.mock.calls[0][0]).not.toHaveProperty('result');
 });

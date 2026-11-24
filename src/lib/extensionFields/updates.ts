@@ -19,8 +19,8 @@ import {
 import saveChunked, { MAX_FIELDS_PER_SAVE } from './saveChunked';
 import { updateLatestTestedCaseIndexes } from './latestTestedCases';
 
-type LinkOptions = {
-  // Only set after a successful create response confirms reference handling.
+export type LinkOptions = {
+  // If true (such as after a create), the reference is already set and does not need to be re-set.
   referenceHandled?: boolean;
 };
 
@@ -53,10 +53,11 @@ export const linkRecords: (
   // Save confirmed successes before reporting failed reference updates.
   if (key === 'caseIds' && !options.referenceHandled) {
     try {
-      await updateReferences(record, ids, 'add');
+      await updateReferences(record, ids);
     } catch (error) {
       if (
-        error instanceof ReferenceUpdateError && error.successfulCaseIds.length
+        error instanceof ReferenceUpdateError &&
+        error.successfulCaseIds.length
       ) {
         await record.setExtensionField(
           IDENTIFIER,
@@ -82,8 +83,6 @@ export const unlinkRecord: (
   const newIds = ids.filter(existingId => id !== existingId);
 
   if (newIds.length === ids.length) return;
-
-  if (key === 'caseIds') await updateReferences(record, [id], 'remove');
 
   await record.setExtensionField(IDENTIFIER, key, newIds);
 };

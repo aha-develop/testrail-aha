@@ -114,7 +114,9 @@ const waitForResults = async (
       }
     }
 
-    // Mutation batches keep polling in-flight operations even after an error.
+    // Bulk mutations (like reference updates) wait until all results are available,
+    // so everything that was updated can be accounted for.
+    // Bulk fetches can break immediately to re-run the batch.
     if ((!waitForAll && error) || eventKeys.every(key => results[key])) break;
 
     await sleep(INTERVAL_TIME);
@@ -206,14 +208,12 @@ export const waitForLambda: <T extends LambdaResult>(
   return results[eventKey] as T;
 };
 
-// Dispatch a group with shared polling and selective rate-limit retries. Wait for
-// all dispatched operations before reporting an error (subject to the poll timeout).
-export const waitForLambdaBatch = async <T extends LambdaResult>(
+// Runs a batch of lambda operations in parallel - as this is used for mutations,
+// waits for all to complete before returning results.
+export const waitForBatchedMutation = async <T extends LambdaResult>(
   props: IndexCallProps
 ): Promise<{ [key: string]: T }> => {
-  for (const eventKey of props.eventKeys) {
-    await aha.account.clearExtensionField(IDENTIFIER, eventKey);
-  }
+  await aha.account.clearExtensionFields(IDENTIFIER, props.eventKeys);
 
   return (await executeLambdaBatch({ ...props, waitForAll: true })) as {
     [key: string]: T;
