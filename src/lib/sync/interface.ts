@@ -78,7 +78,8 @@ const callLambdaBatch = async ({
   eventKeys,
   argsForKeys,
   minimumRetryAt = 0,
-}: IndexCallProps & { minimumRetryAt?: number }) => {
+  waitForAll = false,
+}: IndexCallProps & { minimumRetryAt?: number; waitForAll?: boolean }) => {
   // Check the group being dispatched, including any selective retries,
   // then loop in case another request triggered an API timeout.
   while (true) {
@@ -90,9 +91,20 @@ const callLambdaBatch = async ({
     await sleep(delay);
   }
 
+  const dispatchErrors: LambdaResultMap = {};
   for (const eventKey of eventKeys) {
-    await lambdaFunc({ ...argsForKeys[eventKey], eventKey });
+    try {
+      await lambdaFunc({ ...argsForKeys[eventKey], eventKey });
+    } catch (error) {
+      if (!waitForAll) throw error;
+      // One failed dispatch must not prevent polling the other mutations.
+      dispatchErrors[eventKey] = {
+        error: true,
+        message: error.message || String(error),
+      };
+    }
   }
+  return dispatchErrors;
 };
 
 const waitForResults = async (
@@ -108,8 +120,13 @@ const waitForResults = async (
 
   while (Date.now() - initialTime < MAX_POLL_TIME) {
     const pendingKeys = eventKeys.filter(key => !results[key]);
-    const fetched =
-      await getAccountExtensionFieldMap<LambdaResult>(pendingKeys);
+    let fetched: LambdaResultMap;
+    try {
+      fetched = await getAccountExtensionFieldMap<LambdaResult>(pendingKeys);
+    } catch (error) {
+      if (!waitForAll) throw error;
+      throw new BatchedMutationError(error.message || String(error), results);
+    }
 
     for (const eventKey of pendingKeys) {
       const result = fetched[eventKey];
@@ -139,7 +156,13 @@ const waitForResults = async (
   }
 
   for (const key of eventKeys) {
-    await aha.account.clearExtensionField(IDENTIFIER, key);
+    try {
+      await aha.account.clearExtensionField(IDENTIFIER, key);
+    } catch (error) {
+      if (!waitForAll) throw error;
+      // Cleanup failure does not undo mutations confirmed by the poll.
+      throw new BatchedMutationError(error.message || String(error), results);
+    }
   }
 
   if (error) {
@@ -167,21 +190,31 @@ const executeLambdaBatch = async ({
   let minimumRetryAt = 0;
 
   while (pendingKeys.length) {
-    let attempt: LambdaResultMap;
+    let attempt: LambdaResultMap = {};
+    let dispatchErrors: LambdaResultMap = {};
     try {
-      await callLambdaBatch({
+      dispatchErrors = await callLambdaBatch({
         eventKeys: pendingKeys,
         lambdaFunc,
         argsForKeys,
         minimumRetryAt,
+        waitForAll,
       });
+      Object.assign(attempt, dispatchErrors);
 
-      attempt = await waitForResults(pendingKeys, waitForAll);
+      const dispatchedKeys = pendingKeys.filter(key => !attempt[key]);
+      if (dispatchedKeys.length) {
+        Object.assign(attempt, await waitForResults(dispatchedKeys, waitForAll));
+      }
     } catch (error) {
       if (!waitForAll) throw error;
 
       // A retry can fail after other mutations have already succeeded.
-      throw new BatchedMutationError(error.message || String(error), results);
+      throw new BatchedMutationError(error.message || String(error), {
+        ...results,
+        ...attempt,
+        ...(error instanceof BatchedMutationError ? error.results : {}),
+      });
     }
 
     Object.assign(results, attempt);
@@ -196,7 +229,9 @@ const executeLambdaBatch = async ({
     }
 
     // Identify results to retry, and get the max retry time from their responses.
-    pendingKeys = pendingKeys.filter(key => isRateLimited(attempt[key]));
+    pendingKeys = pendingKeys.filter(
+      key => !dispatchErrors[key] && isRateLimited(attempt[key])
+    );
     minimumRetryAt = pendingKeys.reduce(
       (deadline, key) =>
         Math.max(deadline, getTimeoutRetryAt(attempt[key].message)),

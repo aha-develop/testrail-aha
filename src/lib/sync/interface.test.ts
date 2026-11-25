@@ -255,6 +255,97 @@ describe('common API interface behaviours', () => {
       loadAttributes: async () => {},
     } as unknown as ExtensionRecord;
 
+    it('polls successful dispatches even when another dispatch fails', async () => {
+      Object.assign(aha, {
+        settings: { get: () => true },
+        triggerServer: jest.fn(async (_event, { caseId, eventKey }) => {
+          if (caseId === 2) throw new Error('Dispatch failed');
+          setTimeout(() => { fields[eventKey] = success; }, 10000);
+        }),
+      });
+
+      const setExtensionField = jest.fn(async () => {});
+      const linkedRecord = {
+        ...record,
+        getExtensionField: async () => [100],
+        setExtensionField,
+      } as unknown as ExtensionRecord;
+      const pending = expect(
+        linkRecords(linkedRecord, [1, 2, 3], 'caseIds')
+      ).rejects.toMatchObject({
+        successfulCaseIds: [1, 3],
+        message: expect.stringContaining('Dispatch failed'),
+      });
+
+      await jest.advanceTimersByTimeAsync(9999);
+      expect(setExtensionField).not.toHaveBeenCalled();
+      await jest.runAllTimersAsync();
+      await pending;
+      expect(setExtensionField).toHaveBeenCalledWith(
+        IDENTIFIER, 'caseIds', [100, 1, 3]
+      );
+    });
+
+    it('retains successes from earlier polls when a later poll fails', async () => {
+      Object.assign(aha, {
+        settings: { get: () => true },
+        triggerServer: jest.fn(async (_event, { caseId, eventKey }) => {
+          if (caseId === 1) fields[eventKey] = success;
+        }),
+      });
+
+      const pending = expect(updateReferences(record, [1, 2]))
+        .rejects.toMatchObject({
+          successfulCaseIds: [1],
+          message: 'Polling failed',
+        });
+      await jest.advanceTimersByTimeAsync(3000);
+      (getAccountExtensionFieldMap as jest.Mock).mockRejectedValueOnce(
+        new Error('Polling failed')
+      );
+      await jest.runAllTimersAsync();
+      await pending;
+    });
+
+    it.each([1, 2])(
+      'saves confirmed links when cleanup fails on result %s',
+      async failedCleanup => {
+        Object.assign(aha, {
+          settings: { get: () => true },
+          triggerServer: jest.fn(async (_event, { eventKey }) => {
+            fields[eventKey] = success;
+          }),
+        });
+        (aha.account.clearExtensionField as jest.Mock).mockImplementation(
+          async (_identifier, key) => {
+            if ((aha.account.clearExtensionField as jest.Mock).mock.calls.length === failedCleanup) {
+              throw new Error('Cleanup failed');
+            }
+            delete fields[key];
+          }
+        );
+
+        const setExtensionField = jest.fn(async () => {});
+        const linkedRecord = {
+          ...record,
+          getExtensionField: async () => [100],
+          setExtensionField,
+        } as unknown as ExtensionRecord;
+        const pending = expect(
+          linkRecords(linkedRecord, [1, 2], 'caseIds')
+        ).rejects.toMatchObject({
+          successfulCaseIds: [1, 2],
+          message: 'Cleanup failed',
+        });
+
+        await jest.runAllTimersAsync();
+        await pending;
+        expect(setExtensionField).toHaveBeenCalledWith(
+          IDENTIFIER, 'caseIds', [100, 1, 2]
+        );
+      }
+    );
+
     it.each(['dispatch', 'polling'])(
       'links confirmed successes across attempts and batches when retry %s fails',
       async failure => {

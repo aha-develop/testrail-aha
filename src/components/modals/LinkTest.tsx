@@ -12,7 +12,7 @@ import SelectProject from './SelectProject';
 import SelectTestRun from './SelectTestRun';
 import SelectTest from './SelectTest';
 import { getRecords } from '../../lib/extensionFields/queries';
-import { linkRecords } from '../../lib/extensionFields/updates';
+import { linkTests } from '../../lib/linkTests';
 
 type Props = {
   record: ExtensionRecord;
@@ -78,16 +78,7 @@ const LinkTest: React.FC<Props> = ({
     setSaving(() => true);
     setError(null);
     try {
-      await linkRecords(
-        record,
-        selected.map(({ caseId }) => caseId),
-        'caseIds'
-      );
-      await linkRecords(
-        record,
-        selected.map(({ testId }) => testId),
-        'testIds'
-      );
+      await linkTests(record, selected);
       onClose();
     } catch (error) {
       setError(error.message || 'Could not link tests. Please try again.');

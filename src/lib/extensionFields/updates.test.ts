@@ -75,6 +75,33 @@ describe('case link reference syncing', () => {
     expect(mockSetExtensionField).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])(
+    'preserves concurrent additions and removals after syncing (partial failure: %s)',
+    async partialFailure => {
+      mockGetExtensionField.mockResolvedValueOnce([123, 321]);
+      mockSyncReferences.mockImplementationOnce(async () => {
+        // Another user removes both old cases and adds 999 and 456.
+        mockGetExtensionField.mockResolvedValue([999, 456]);
+        if (partialFailure) {
+          throw new ReferenceUpdateError('C789 failed', [456]);
+        }
+      });
+
+      const pending = linkRecords(mockRecord, [123, 456, 789], 'caseIds');
+      if (partialFailure) {
+        await expect(pending).rejects.toThrow('C789 failed');
+      } else {
+        await pending;
+      }
+
+      expect(mockSetExtensionField).toHaveBeenCalledWith(
+        IDENTIFIER,
+        'caseIds',
+        partialFailure ? [999, 456] : [999, 456, 789]
+      );
+    }
+  );
+
   it('saves a new link without syncing a reference already handled during creation', async () => {
     await linkRecord(mockRecord, 456, 'caseIds', { referenceHandled: true });
     expect(mockSyncReferences).not.toHaveBeenCalled();

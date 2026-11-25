@@ -41,6 +41,17 @@ export const linkRecords: (
 ) => Promise<void> = async (record, ids, key, options = {}) => {
   if (ids.length === 0) return;
 
+  // Reference syncing can take some time. Merge into the latest links so edits
+  // from another tab or user during that wait are preserved.
+  const saveLinks = async (linkedIds: number[]) => {
+    const currentIds =
+      (await record.getExtensionField<number[]>(IDENTIFIER, key)) ?? [];
+
+    await record.setExtensionField(IDENTIFIER, key, [
+      ...new Set([...currentIds, ...linkedIds]),
+    ]);
+  };
+
   let indexField = await record.getExtensionField<number[]>(IDENTIFIER, key);
 
   if (!indexField) indexField = [];
@@ -59,18 +70,13 @@ export const linkRecords: (
         error instanceof ReferenceUpdateError &&
         error.successfulCaseIds.length
       ) {
-        await record.setExtensionField(
-          IDENTIFIER,
-          key,
-          indexField.concat(error.successfulCaseIds)
-        );
+        await saveLinks(error.successfulCaseIds);
       }
       throw error;
     }
   }
 
-  indexField = indexField.concat(ids);
-  await record.setExtensionField(IDENTIFIER, key, indexField);
+  await saveLinks(ids);
 };
 
 export const unlinkRecord: (
