@@ -19,6 +19,7 @@ let fields: Record<string, any>;
 const query = queryExtensionFields as jest.Mock;
 const write = jest.fn();
 const triggerServer = jest.fn();
+const getSetting = jest.fn();
 const copy = (value: any) => JSON.parse(JSON.stringify(value));
 
 const testCase = (id = 1, suiteId = 1, projectId = 1): TestCase => ({
@@ -60,6 +61,9 @@ const queriedKeys = () => query.mock.calls.flatMap(([names]) => names);
 beforeEach(() => {
   fields = {};
   jest.resetAllMocks();
+  getSetting.mockImplementation(key =>
+    key === `${IDENTIFIER}.showLatestResult` ? true : undefined
+  );
 
   query.mockImplementation(async (names: string[]) =>
     names
@@ -73,6 +77,7 @@ beforeEach(() => {
 
   (global as any).aha = {
     account: { setExtensionFields: write },
+    settings: { get: getSetting },
     triggerServer,
   };
 });
@@ -309,6 +314,51 @@ it('supersedes a local miss through the normal saveRecords path', async () => {
     initialized: true,
     latest: null,
   });
+});
+
+it.each([false, undefined])(
+  'skips all latest index reads and writes when Show Latest Result is %p',
+  async setting => {
+    getSetting.mockReturnValue(setting);
+    fields[syncedLatestCaseKey(1)] = {
+      initialized: true,
+      latest: { testId: 1, runId: 1 },
+    };
+
+    await updateLatestTestedCaseIndexes([test(2, 2)]);
+
+    expect(getSetting).toHaveBeenCalledWith(`${IDENTIFIER}.showLatestResult`);
+    expect(query).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
+    expect(fields[syncedLatestCaseKey(1)].latest).toEqual({
+      testId: 1,
+      runId: 1,
+    });
+  }
+);
+
+it('saves tests with the setting off and discovers their results when first enabled', async () => {
+  getSetting.mockReturnValue(false);
+  run(1);
+  const saved: Test = { kind: 'Test', id: 1, runId: 1, caseId: 1, statusId: 1 };
+
+  await saveRecords([saved]);
+
+  expect(fields.test_1).toEqual(saved);
+  expect(fields.run_1_testIds).toEqual([1]);
+  expect(queriedKeys()).not.toContain(syncedLatestCaseKey(1));
+  expect(fields[syncedLatestCaseKey(1)]).toBeUndefined();
+  expect(fields[localLatestCaseKey(1)]).toBeUndefined();
+  expect(write).toHaveBeenCalledTimes(2);
+
+  getSetting.mockReturnValue(true);
+  expect(await getLatestTestedTestsForCases([testCase()])).toEqual({ 1: saved });
+
+  run(2);
+  const newer: Test = { ...saved, id: 2, runId: 2 };
+  await saveRecords([newer]);
+  expect(fields[syncedLatestCaseKey(1)].latest).toEqual({ testId: 2, runId: 2 });
+  expect(await getLatestTestedTestsForCases([testCase()])).toEqual({ 1: newer });
 });
 
 it('keeps the newest tested run across sync batches and ignores newer Untested runs', async () => {

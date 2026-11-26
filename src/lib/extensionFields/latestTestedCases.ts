@@ -1,4 +1,4 @@
-import { Test, TestCase, TestRun } from '../../extension';
+import { IDENTIFIER, Test, TestCase, TestRun } from '../../extension';
 import { fieldName, getAccountExtensionFieldMap, getRecords } from './queries';
 import saveChunked, { MAX_FIELDS_PER_SAVE } from './saveChunked';
 
@@ -229,7 +229,12 @@ export function getLatestTestedTestsForCases(
 
 // Updates the synced latest tested case indexes based on the given tests.
 export function updateLatestTestedCaseIndexes(tests: Test[]): Promise<void> {
-  if (!tests.length) return Promise.resolve();
+  if (
+    !tests.length ||
+    aha.settings.get(`${IDENTIFIER}.showLatestResult`) !== true
+  ) {
+    return Promise.resolve();
+  }
 
   return withSyncLock(async () => {
     const keys = [
