@@ -1,10 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { TestCase, TestRun, Test, Status } from '../../extension';
-import {
-  getRecords,
-  getLinkedComments,
-  getRunRowData,
-} from '../../lib/extensionFields/queries';
+import { FeatureTabData, getFeatureTabData } from '../../lib/featureTabData';
 import { timeAgo } from '../../lib/util';
 import { Styles } from '../Styles';
 import LinkTestRun from '../modals/LinkTestRun';
@@ -23,64 +18,13 @@ type TabProps = {
   settings: Aha.Settings;
 };
 
-type TestMap = { [runId: number]: [TestCase, Test][] };
-
-type FeatureTabData = {
-  testCases: TestCase[];
-  tests: { [caseId: number]: Test };
-  comments: { [testId: number]: { timestamp: number; comment: string } };
-  statuses: { [key: string]: Status };
-  runs: TestRun[];
-  runTestMap: TestMap;
-};
-
-const getFeatureTabData: (
-  caseIds: number[],
-  runIds: number[],
-  testIds: number[]
-) => Promise<FeatureTabData> = async (caseIds, runIds, testIds) => {
-  const testCases = await getRecords<TestCase>(caseIds, 'TestCase');
-  const runs = await getRecords<TestRun>(runIds, 'TestRun');
-  const linkedTests = await getRecords<Test>(testIds, 'Test');
-
-  const testMap = linkedTests.reduce(
-    (acc, test) => ({ ...acc, [test.caseId]: test }),
-    {}
-  );
-
-  const [runTestMap, runTests] = await getRunRowData(runs.map(run => run.id));
-
-  const testIdSet = new Set(runTests.map(test => test.id));
-  const statusIds = new Set(runTests.map(test => test.statusId));
-
-  for (const test of linkedTests) {
-    testIdSet.add(test.id);
-    statusIds.add(test.statusId);
-  }
-
-  const commentMap = await getLinkedComments([...testIdSet]);
-  const statuses = await getRecords<Status>([...statusIds], 'Status');
-  const statusMap = statuses.reduce((acc, status) => {
-    acc[status.id] = status;
-    return acc;
-  }, {});
-
-  return {
-    testCases,
-    runs,
-    runTestMap,
-    tests: testMap,
-    comments: commentMap,
-    statuses: statusMap,
-  };
-};
-
 const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   const caseIds = fields['caseIds'] as number[] | undefined;
   const runIds = fields['runIds'] as number[] | undefined;
   const testIds = fields['testIds'] as number[] | undefined;
 
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [syncData, setSyncData] = useState<BulkSyncState>(null);
   const isRefreshing =
     syncData?.state === SyncState.Running ||
@@ -101,17 +45,38 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
 
   const domain = settings.get('domain') as string | undefined;
   const syncDelay = settings.get('syncDelay') as number | undefined;
+  const showLatestTestedResultForCases =
+    settings.get('showLatestResult') === true;
 
   useEffect(() => {
+    let active = true;
     const initData = async () => {
-      const tabData = await getFeatureTabData(caseIds, runIds, testIds);
-
-      setTabData(tabData);
-      setLoading(false);
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const tabData = await getFeatureTabData(
+          caseIds,
+          runIds,
+          testIds,
+          showLatestTestedResultForCases
+        );
+        if (active) setTabData(tabData);
+      } catch (error) {
+        if (active) {
+          setLoadError(
+            error.message || 'Could not load test results. Please try again.'
+          );
+        }
+      } finally {
+        if (active) setLoading(false);
+      }
     };
 
     initData();
-  }, [caseIds, runIds, testIds, reload]);
+    return () => {
+      active = false;
+    };
+  }, [caseIds, runIds, testIds, reload, showLatestTestedResultForCases]);
 
   useEffect(() => {
     waitForBulkSync({
@@ -125,20 +90,29 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
   let caseRows = null;
   let runRows = null;
 
-  const { testCases, runs, runTestMap, tests, comments, statuses } =
-    tabData || {
-      testCases: [],
-      runs: [],
-      runTestMap: {},
-      tests: {},
-      comments: {},
-      statuses: {},
-    };
+  const {
+    testCases,
+    runs,
+    runTestMap,
+    tests,
+    linkedTests,
+    comments,
+    statuses,
+  } = tabData || {
+    testCases: [],
+    runs: [],
+    runTestMap: {},
+    tests: {},
+    linkedTests: [],
+    comments: {},
+    statuses: {},
+  };
 
   // Prevent errors if a linked record was deleted (e.g. from the suite ignore-list)
   const existingCaseIds = testCases.map(testCase => testCase.id);
   const existingRunIds = runs.map(run => run.id);
-  const existingTestIds = Object.values(tests).map(test => test.id);
+  const existingTestIds = linkedTests.map(test => test.id);
+  const linkedTestIds = new Set(existingTestIds);
 
   if (testCases.length > 0) {
     caseRows = testCases.map(testCase => {
@@ -151,6 +125,7 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
           key={`case-${testCase.id}`}
           testCase={testCase}
           test={test}
+          inferred={!!test && !linkedTestIds.has(test.id)}
           comment={comment}
           status={status}
           record={record}
@@ -283,6 +258,14 @@ const FeatureTab: React.FC<TabProps> = ({ record, fields, settings }) => {
           )}
         </div>
       </div>
+      {loadError && (
+        <aha-alert type='danger'>
+          {loadError}
+          <aha-button kind='link' onClick={reloadTabData}>
+            Try again
+          </aha-button>
+        </aha-alert>
+      )}
       {loading ? (
         <div>
           <aha-loading-row rows={5} columns={2} />

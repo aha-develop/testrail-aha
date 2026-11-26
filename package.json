@@ -1,7 +1,7 @@
 {
   "name": "aha-develop.testrail",
   "description": "TestRail",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "author": "Aha! (support@aha.io)",
   "repository": {
     "type": "git",
@@ -32,6 +32,13 @@
         }
       },
       "events": {
+        "updateReference": {
+          "title": "Update Reference",
+          "entryPoint": "src/events/updateReference.ts",
+          "handles": [
+            "aha-develop.testrail.updateReference"
+          ]
+        },
         "createTestCase": {
           "title": "Create Test Case",
           "entryPoint": "src/events/createTestCase.ts",
@@ -143,6 +150,24 @@
           "scope": [
             "account"
           ]
+        },
+        "updateReferences": {
+          "title": "Sync Aha! References to TestRail",
+          "type": "boolean",
+          "description": "Add the Aha! reference number to the references field when linking/creating test cases",
+          "scope": [
+            "account"
+          ],
+          "default": false
+        },
+        "showLatestResult": {
+          "title": "Show Latest Result",
+          "type": "boolean",
+          "description": "Linked test cases without linked tests will automatically show the latest result for that case",
+          "scope": [
+            "account"
+          ],
+          "default": false
         }
       }
     }

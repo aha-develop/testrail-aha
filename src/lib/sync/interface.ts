@@ -60,6 +60,16 @@ type PagedWaitProps = WaitProps & {
 
 type LambdaResultMap = { [key: string]: LambdaResult };
 
+export class BatchedMutationError extends Error {
+  constructor(
+    message: string,
+    readonly results: LambdaResultMap
+  ) {
+    super(message);
+    this.name = 'BatchedMutationError';
+  }
+}
+
 const isRateLimited = (result: LambdaResult) =>
   result.error === true && isTimeoutMessage(result.message);
 
@@ -68,7 +78,8 @@ const callLambdaBatch = async ({
   eventKeys,
   argsForKeys,
   minimumRetryAt = 0,
-}: IndexCallProps & { minimumRetryAt?: number }) => {
+  waitForAll = false,
+}: IndexCallProps & { minimumRetryAt?: number; waitForAll?: boolean }) => {
   // Check the group being dispatched, including any selective retries,
   // then loop in case another request triggered an API timeout.
   while (true) {
@@ -80,13 +91,25 @@ const callLambdaBatch = async ({
     await sleep(delay);
   }
 
+  const dispatchErrors: LambdaResultMap = {};
   for (const eventKey of eventKeys) {
-    await lambdaFunc({ ...argsForKeys[eventKey], eventKey });
+    try {
+      await lambdaFunc({ ...argsForKeys[eventKey], eventKey });
+    } catch (error) {
+      if (!waitForAll) throw error;
+      // One failed dispatch must not prevent polling the other mutations.
+      dispatchErrors[eventKey] = {
+        error: true,
+        message: error.message || String(error),
+      };
+    }
   }
+  return dispatchErrors;
 };
 
 const waitForResults = async (
-  eventKeys: string[]
+  eventKeys: string[],
+  waitForAll = false
 ): Promise<LambdaResultMap> => {
   const initialTime = Date.now();
   const results: LambdaResultMap = {};
@@ -97,8 +120,13 @@ const waitForResults = async (
 
   while (Date.now() - initialTime < MAX_POLL_TIME) {
     const pendingKeys = eventKeys.filter(key => !results[key]);
-    const fetched =
-      await getAccountExtensionFieldMap<LambdaResult>(pendingKeys);
+    let fetched: LambdaResultMap;
+    try {
+      fetched = await getAccountExtensionFieldMap<LambdaResult>(pendingKeys);
+    } catch (error) {
+      if (!waitForAll) throw error;
+      throw new BatchedMutationError(error.message || String(error), results);
+    }
 
     for (const eventKey of pendingKeys) {
       const result = fetched[eventKey];
@@ -108,28 +136,43 @@ const waitForResults = async (
 
         if (result.error && !isRateLimited(result)) {
           error = result.message;
-          break;
+          if (!waitForAll) break;
         }
       }
     }
 
-    // Only stop when we have a non-timeout error, or all requests resolved.
-    if (error || eventKeys.every(key => results[key])) break;
+    // Bulk mutations (like reference updates) wait until all results are available,
+    // so everything that was updated can be accounted for.
+    // Bulk fetches can break immediately to re-run the batch.
+    if ((!waitForAll && error) || eventKeys.every(key => results[key])) break;
 
     await sleep(INTERVAL_TIME);
   }
 
+  const timeoutMessage =
+    'Timeout waiting for lambda to complete - please try again';
   if (!error && eventKeys.some(key => !results[key])) {
-    error = 'Timeout waiting for lambda to complete - please try again';
+    error = timeoutMessage;
   }
 
   for (const key of eventKeys) {
-    await aha.account.clearExtensionField(IDENTIFIER, key);
+    try {
+      await aha.account.clearExtensionField(IDENTIFIER, key);
+    } catch (error) {
+      if (!waitForAll) throw error;
+      // Cleanup failure does not undo mutations confirmed by the poll.
+      throw new BatchedMutationError(error.message || String(error), results);
+    }
   }
 
   if (error) {
     return Object.fromEntries(
-      eventKeys.map(key => [key, { error: true, message: error }])
+      eventKeys.map(key => [
+        key,
+        waitForAll && results[key]
+          ? results[key]
+          : { error: true, message: waitForAll ? timeoutMessage : error },
+      ])
     );
   }
 
@@ -140,23 +183,44 @@ const executeLambdaBatch = async ({
   eventKeys,
   lambdaFunc,
   argsForKeys,
-}: IndexCallProps): Promise<LambdaResultMap> => {
+  waitForAll = false,
+}: IndexCallProps & { waitForAll?: boolean }): Promise<LambdaResultMap> => {
   const results: LambdaResultMap = {};
   let pendingKeys = eventKeys;
   let minimumRetryAt = 0;
 
   while (pendingKeys.length) {
-    await callLambdaBatch({
-      eventKeys: pendingKeys,
-      lambdaFunc,
-      argsForKeys,
-      minimumRetryAt,
-    });
+    let attempt: LambdaResultMap = {};
+    let dispatchErrors: LambdaResultMap = {};
+    try {
+      dispatchErrors = await callLambdaBatch({
+        eventKeys: pendingKeys,
+        lambdaFunc,
+        argsForKeys,
+        minimumRetryAt,
+        waitForAll,
+      });
+      Object.assign(attempt, dispatchErrors);
 
-    const attempt = await waitForResults(pendingKeys);
+      const dispatchedKeys = pendingKeys.filter(key => !attempt[key]);
+      if (dispatchedKeys.length) {
+        Object.assign(attempt, await waitForResults(dispatchedKeys, waitForAll));
+      }
+    } catch (error) {
+      if (!waitForAll) throw error;
+
+      // A retry can fail after other mutations have already succeeded.
+      throw new BatchedMutationError(error.message || String(error), {
+        ...results,
+        ...attempt,
+        ...(error instanceof BatchedMutationError ? error.results : {}),
+      });
+    }
+
     Object.assign(results, attempt);
 
     if (
+      !waitForAll &&
       Object.values(attempt).some(
         result => result.error && !isRateLimited(result)
       )
@@ -165,7 +229,9 @@ const executeLambdaBatch = async ({
     }
 
     // Identify results to retry, and get the max retry time from their responses.
-    pendingKeys = pendingKeys.filter(key => isRateLimited(attempt[key]));
+    pendingKeys = pendingKeys.filter(
+      key => !dispatchErrors[key] && isRateLimited(attempt[key])
+    );
     minimumRetryAt = pendingKeys.reduce(
       (deadline, key) =>
         Math.max(deadline, getTimeoutRetryAt(attempt[key].message)),
@@ -194,6 +260,18 @@ export const waitForLambda: <T extends LambdaResult>(
   });
 
   return results[eventKey] as T;
+};
+
+// Runs a batch of lambda operations in parallel - as this is used for mutations,
+// waits for all to complete before returning results.
+export const waitForBatchedMutation = async <T extends LambdaResult>(
+  props: IndexCallProps
+): Promise<{ [key: string]: T }> => {
+  await aha.account.clearExtensionFields(IDENTIFIER, props.eventKeys);
+
+  return (await executeLambdaBatch({ ...props, waitForAll: true })) as {
+    [key: string]: T;
+  };
 };
 
 // As above, but makes multiple calls to the lambda to fetch pages until there

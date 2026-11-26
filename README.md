@@ -9,6 +9,7 @@ It provides these contributions:
 - `TestRail connection page` - Allows for finer-grained control of TestRail data sync, such as loading new projects and suites. Under the 'Work' menu item.
 - `Sync events` - The 10 syncing events are called by the connection page and auto-sync to fetch data from TestRail
 - `Create Test Case event` - Calls the TestRail API to create new test cases
+- `Sync Test Case Reference event` - Adds an Aha! record reference on a TestRail test case when enabled.
 
 ## Demo
 
@@ -45,6 +46,10 @@ It provides these contributions:
    - Enter the TestRail email address of the user that generated the key in step 2 into the 'TestRail API Username' field.
 
    - (Optional) Adjust the automatic sync delay field. This controls how often auto-sync will run when you visit the tests tab. It defaults to 1 hour (3600 seconds) since the last successful sync.
+
+   - (Optional) Enable **Show Latest Result**. Aha! records linked to test cases without an explicitly linked test will show the results from the most recent run that has a result for that test case.
+
+   - (Optional) Enable **Sync Aha! References to TestRail**. When a test case is linked or created, the Aha! record's reference number will be appended to the references field in TestRail. This will not affect already-linked test cases.
 
 4. Run initial sync.
    - In Aha!, go to Work -> TestRail connection. Click 'Sync all' next to 'Full TestRail re-sync'.

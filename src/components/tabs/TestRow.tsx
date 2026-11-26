@@ -10,6 +10,7 @@ import LinkTestToTestCase from '../modals/LinkTestToTestCase';
 type RowProps = {
   testCase: TestCase;
   test?: Test;
+  inferred?: boolean;
   comment?: { timestamp: number; comment: string };
   status?: Status;
   domain: string;
@@ -21,6 +22,7 @@ type RowProps = {
 const TestRow: React.FC<RowProps> = ({
   testCase,
   test,
+  inferred = false,
   comment,
   status,
   domain,
@@ -29,10 +31,20 @@ const TestRow: React.FC<RowProps> = ({
   canDelete = true,
 }) => {
   const [linkTestModalOpen, setLinkTestModalOpen] = useState(false);
+  const [unlinking, setUnlinking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const unlink = () => {
-    unlinkRecord(record, testCase.id, 'caseIds');
-    if (test) unlinkRecord(record, test.id, 'testIds');
+  const unlink = async () => {
+    setUnlinking(true);
+    setError(null);
+    try {
+      await unlinkRecord(record, testCase.id, 'caseIds');
+      if (test && !inferred) await unlinkRecord(record, test.id, 'testIds');
+    } catch (error) {
+      setError(error.message || 'Could not unlink test case. Please try again.');
+    } finally {
+      setUnlinking(false);
+    }
   };
 
   return (
@@ -43,11 +55,12 @@ const TestRow: React.FC<RowProps> = ({
         </div>
         <div>
           <div className='test-title'>{testCase.title}</div>
+          {error && <aha-alert type='danger'>{error}</aha-alert>}
           {comment && <div className='text-gray'>{comment.comment}</div>}
         </div>
       </div>
       <div className='test-row-column'>
-        {test ? (
+        {test && (
           <>
             {comment && (
               <div className='text-light'>
@@ -64,7 +77,8 @@ const TestRow: React.FC<RowProps> = ({
               </aha-pill>
             )}
           </>
-        ) : (
+        )}
+        {(!test || inferred) && (
           <>
             <aha-button
               size='small'
@@ -85,7 +99,12 @@ const TestRow: React.FC<RowProps> = ({
           </>
         )}
         {canDelete && (
-          <aha-button size='mini' kind='icon' onClick={unlink}>
+          <aha-button
+            size='mini'
+            kind='icon'
+            onClick={unlink}
+            disabled={unlinking ? true : null}
+          >
             <aha-icon icon='fa-regular fa-trash-can' />
           </aha-button>
         )}

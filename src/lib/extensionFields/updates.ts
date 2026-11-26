@@ -3,42 +3,80 @@ import {
   TestRailRecord,
   TestRun,
   TestResult,
+  Test,
 } from '../../extension';
 import { ExtensionRecord } from '../extensionRecord';
+import {
+  ReferenceUpdateError,
+  updateReferences,
+} from '../sync/updateReferences';
 import {
   fieldName,
   indexKeyForRecord,
   getAccountExtensionFieldMap,
 } from './queries';
 
-const MAX_FIELDS_PER_SAVE = 500;
+import saveChunked, { MAX_FIELDS_PER_SAVE } from './saveChunked';
+import { updateLatestTestedCaseIndexes } from './latestTestedCases';
+
+export type LinkOptions = {
+  // If true (such as after a create), the reference is already set and does not need to be re-set.
+  referenceHandled?: boolean;
+};
 
 export const linkRecord: (
   record: ExtensionRecord,
   id: number,
-  key: string
-) => Promise<void> = async (record, id, key) => {
-  await linkRecords(record, [id], key);
+  key: string,
+  options?: LinkOptions
+) => Promise<void> = async (record, id, key, options) => {
+  await linkRecords(record, [id], key, options);
 };
 
 export const linkRecords: (
   record: ExtensionRecord,
   ids: number[],
-  key: string
-) => Promise<void> = async (record, ids, key) => {
+  key: string,
+  options?: LinkOptions
+) => Promise<void> = async (record, ids, key, options = {}) => {
   if (ids.length === 0) return;
+
+  // Reference syncing can take some time. Merge into the latest links so edits
+  // from another tab or user during that wait are preserved.
+  const saveLinks = async (linkedIds: number[]) => {
+    const currentIds =
+      (await record.getExtensionField<number[]>(IDENTIFIER, key)) ?? [];
+
+    await record.setExtensionField(IDENTIFIER, key, [
+      ...new Set([...currentIds, ...linkedIds]),
+    ]);
+  };
 
   let indexField = await record.getExtensionField<number[]>(IDENTIFIER, key);
 
   if (!indexField) indexField = [];
 
   const existingIds = new Set(indexField);
-  ids = ids.filter(id => !existingIds.has(id));
+  ids = [...new Set(ids)].filter(id => !existingIds.has(id));
 
   if (ids.length === 0) return;
 
-  indexField = indexField.concat(ids);
-  await record.setExtensionField(IDENTIFIER, key, indexField);
+  // Save confirmed successes before reporting failed reference updates.
+  if (key === 'caseIds' && !options.referenceHandled) {
+    try {
+      await updateReferences(record, ids);
+    } catch (error) {
+      if (
+        error instanceof ReferenceUpdateError &&
+        error.successfulCaseIds.length
+      ) {
+        await saveLinks(error.successfulCaseIds);
+      }
+      throw error;
+    }
+  }
+
+  await saveLinks(ids);
 };
 
 export const unlinkRecord: (
@@ -46,9 +84,7 @@ export const unlinkRecord: (
   id: number,
   key: string
 ) => Promise<void> = async (record, id, key) => {
-  let ids = (await record.getExtensionField(IDENTIFIER, key)) as
-    | number[]
-    | undefined;
+  const ids = (await record.getExtensionField<number[]>(IDENTIFIER, key)) ?? [];
 
   const newIds = ids.filter(existingId => id !== existingId);
 
@@ -70,6 +106,9 @@ export const saveRecords: <T extends TestRailRecord>(
 
   await saveChunked(fields);
   await updateRecordIndexes(records);
+  await updateLatestTestedCaseIndexes(
+    records.filter(record => record.kind === 'Test') as Test[]
+  );
 };
 
 export const saveNewRuns: (
@@ -173,17 +212,6 @@ export const linkResultsToTests = async (results: TestResult[]) => {
   if (!shouldUpdate) return;
 
   await saveChunked(fields);
-};
-
-const saveChunked: (
-  fields: [string, any][]
-) => Promise<void> = async fields => {
-  for (let i = 0; i < fields.length; i += MAX_FIELDS_PER_SAVE) {
-    const chunk = fields.slice(i, i + MAX_FIELDS_PER_SAVE);
-    const chunkFields = Object.fromEntries(chunk);
-
-    await aha.account.setExtensionFields(IDENTIFIER, chunkFields);
-  }
 };
 
 export const deleteChunked: (

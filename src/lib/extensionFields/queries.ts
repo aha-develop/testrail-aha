@@ -85,7 +85,8 @@ export const getAccountExtensionFieldMap: <T>(
 
   return extensionFields.reduce((acc, field) => {
     if (!field.value) return acc;
-    return { ...acc, [field.name]: field.value };
+    acc[field.name] = field.value;
+    return acc;
   }, {});
 };
 

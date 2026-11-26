@@ -1,79 +1,7 @@
-import { IDENTIFIER, TestCase } from '../extension';
-import { BaseParams, fetchTestRail, logResult } from '../lib/api';
+import { IDENTIFIER } from '../extension';
+import { createTestCase, CreateTestCaseParams } from '../lib/createTestCase';
 
-type CreateProps = BaseParams & {
-  projectId: number;
-  sectionId: number;
-  title: string;
-  precondition: string;
-  steps: string;
-  results: string;
-};
-
-const createTestCase: (props: CreateProps) => Promise<void> = async ({
-  domain,
-  projectId,
-  sectionId,
-  title,
-  precondition,
-  steps,
-  results,
-  record,
-  eventKey,
-}) => {
-  try {
-    console.log(
-      `Beginning TestRail test case create for section: ${sectionId}`
-    );
-
-    const body = {
-      title,
-      template_id: 1,
-      custom_preconds: precondition,
-      custom_steps: steps,
-      custom_expected: results,
-    };
-
-    const json = await fetchTestRail({
-      domain,
-      record,
-      eventKey,
-      body,
-      path: `add_case/${sectionId}`,
-      method: 'POST',
-    });
-
-    if (!json) return; // Preserve API errors so the coordinator can retry rate limits.
-
-    const testCase: TestCase = {
-      id: json.id,
-      kind: 'TestCase',
-      title: json.title,
-      projectId,
-      suiteId: json.suite_id,
-      createdOn: json.created_on,
-    };
-
-    await logResult({
-      record,
-      eventKey,
-      error: false,
-      result: testCase,
-      message: `Successfully created test case`,
-    });
-  } catch (error) {
-    await logResult({
-      record,
-      eventKey,
-      error: true,
-      message: `Unknown error creating test case: ${error.message}`,
-    });
-
-    throw error;
-  }
-};
-
-aha.on(
+aha.on<CreateTestCaseParams & { domain?: string; eventKey: string }>(
   { event: `${IDENTIFIER}.createTestCase` },
   async ({
     domain,
@@ -84,6 +12,7 @@ aha.on(
     precondition,
     steps,
     results,
+    reference,
   }) => {
     await createTestCase({
       record: aha.account,
@@ -94,6 +23,7 @@ aha.on(
       precondition,
       steps,
       results,
+      reference,
       eventKey,
     });
   }
