@@ -9,7 +9,7 @@ It provides these contributions:
 - `TestRail connection page` - Allows for finer-grained control of TestRail data sync, such as loading new projects and suites. Under the 'Work' menu item.
 - `Sync events` - The 10 syncing events are called by the connection page and auto-sync to fetch data from TestRail
 - `Create Test Case event` - Calls the TestRail API to create new test cases
-- `Sync Test Case Reference event` - Adds or removes an Aha! record reference on a TestRail test case when enabled.
+- `Sync Test Case Reference event` - Adds an Aha! record reference on a TestRail test case when enabled.
 
 ## Demo
 
